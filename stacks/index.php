@@ -1,0 +1,103 @@
+<?php 
+$logLevel;
+//date_default_timezone_set("Europe/London"); 
+
+//Rollbar integration
+require_once $_SERVER["DOCUMENT_ROOT"].'/stacks/Rollbar/rollbar.php'; 
+
+function get_curr_user() { 
+	if ($_SESSION['user_id']) { 
+		return array( 'id' => $_SESSION['user_id'], // required - value is a string 
+			  'username' => $_SESSION['username'], // optional - value is a string 
+			  'email' => $_SESSION['user_email'] // optional - value is a string 
+		);
+	} 
+	return null;
+}
+
+$config = array( 
+	// required
+	'access_token' => '1542a946af0b4867894c387ffa81068a', 
+	// optional - environment name. any string will do.
+	'environment' => 'x10hosting', 	
+	// optional - path to directory your code is in. used for linking stack traces.
+	'root' => $_SERVER["DOCUMENT_ROOT"].'/stacks',
+	// optional - for person tracking
+	'person_fn' => 'get_curr_user'
+	);
+	
+Rollbar::init($config);
+
+ini_set('error_reporting', E_ALL);
+error_reporting(E_ALL);
+ini_set('log_errors',TRUE);
+ini_set('html_errors',FALSE);
+ini_set('error_log',$_SERVER["DOCUMENT_ROOT"].'/stacks/Logs/error_log.txt');
+//ini_set('display_errors',FALSE);
+
+require $_SERVER["DOCUMENT_ROOT"]."/stacks/Brian/Functions1-5.inc";
+set_error_handler("fnErrorHandler",E_ALL);
+
+$callString = filter_input(INPUT_GET,'go');
+
+if ($callString == null) {
+	echo "go message not found";
+	fnCommentLog("go parameters not found");
+	//fnLogMessageToDb("go parameters not found");
+	fnErrorHandler(0,"go parameters not found"); }
+	//error_log("go parameters not found",3,"../../Brian/error_log.txt");}   
+else {
+	
+	fnDbConnect();
+	
+	$fnResp = fnProcessInput($callString);
+	echo $fnResp;
+	//fnDisplayTable($fnResp);
+		
+	include $_SERVER["DOCUMENT_ROOT"]."/stacks/Brian/GC1-1.inc";
+		
+	fnDbDisconnect(); }
+
+	
+function fnDisplayTable($inputString) {
+	fnLogMessageToDb("start display table");
+	//only do this if the input is a game status string
+	//if (substr($inputString,4,4) != "game") {return;}
+	
+	
+	//find game reference
+	$inx = strpos($inputString,"gameRef",0);
+	$inx2 = strpos($inputString,"=",$inx);
+	$inx3 = strpos($inputString,";",$inx2);
+	$gameRef = substr($inputString,$inx2+1,$inx3-$inx2-1);
+	$gameRow = fnQrySelectGame($gameRef);
+	
+	echo "<p>";
+	echo "<table border = 1>";
+	echo "<tr>";
+	echo "<td>" . "P1 Reserve" . "</td>";
+	for ($i=1; $i<=$gameRow['AreaSize']; $i++) {
+		echo "<td>" . "Stack" . $i . "</td>";
+	}
+	echo "<td>" . "P2 Reserve" . "</td>";
+	echo "</tr>";
+
+	$stackRows = fnQrySelectStacks($gameRef,0);
+	//loop through the rows of the table 
+	for ($hSub=($gameRow['AreaSize']+2)*2; $hSub>=1; $hSub--) {
+		//set new row
+		echo "<tr>"; 
+		//loop through the columns from left to right
+		for ($sSub=0; $sSub<=$gameRow['AreaSize']+1; $sSub++) {
+			if ($stackRows[$sSub]['StackHeight'] == $hSub) {
+				echo "<td>" . $stackRows[$sSub]['Top'] . "</td>"; }
+			else {
+				echo "<td>" . "" . "</td>"; }
+		}
+		//set end of row
+		echo "</tr>";
+	}
+	 
+}
+	
+?>

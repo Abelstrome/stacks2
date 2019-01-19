@@ -1,0 +1,23 @@
+[08-Dec-2018 16:29:44 Europe/Berlin] PHP Fatal error:  Allowed memory size of 134217728 bytes exhausted (tried to allocate 4096 bytes) in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 299
+[15-Dec-2018 12:07:20 Europe/Berlin] PHP Parse error:  syntax error, unexpected '1' (T_LNUMBER) in C:\xampp\htdocs\stacks2\Brian2\Functions21-5-1.inc on line 291
+[15-Dec-2018 21:42:08 Europe/Berlin] PHP Parse error:  syntax error, unexpected '=' in C:\xampp\htdocs\stacks2\Brian2\Functions21-5-1.inc on line 951
+[15-Dec-2018 21:44:07 Europe/Berlin] PHP Parse error:  syntax error, unexpected end of file in C:\xampp\htdocs\stacks2\Brian2\Functions21-5-1.inc on line 3044
+[31-Dec-2018 18:22:19 Europe/Berlin] PHP Parse error:  syntax error, unexpected ',' in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 217
+[31-Dec-2018 18:22:21 Europe/Berlin] PHP Parse error:  syntax error, unexpected ',' in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 217
+[12-Jan-2019 10:54:24 Europe/Berlin] PHP Parse error:  syntax error, unexpected ',' in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 217
+[12-Jan-2019 10:54:45 Europe/Berlin] PHP Parse error:  syntax error, unexpected ',' in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 217
+[12-Jan-2019 10:55:24 Europe/Berlin] PHP Parse error:  syntax error, unexpected '$qryUpdateGSAction' (T_VARIABLE) in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 218
+[12-Jan-2019 11:13:52 Europe/Berlin] PHP Parse error:  syntax error, unexpected ']', expecting ')' in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 361
+[12-Jan-2019 11:19:23 Europe/Berlin] PHP Parse error:  syntax error, unexpected 'break' (T_BREAK) in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 2498
+[12-Jan-2019 11:20:10 Europe/Berlin] PHP Fatal error:  Only variables can be passed by reference in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 2497
+[12-Jan-2019 11:20:17 Europe/Berlin] PHP Fatal error:  Only variables can be passed by reference in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 2497
+[12-Jan-2019 11:22:47 Europe/Berlin] PHP Parse error:  syntax error, unexpected '&' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 2500
+[12-Jan-2019 11:41:15 Europe/Berlin] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 341
+[12-Jan-2019 23:03:45 Europe/Berlin] PHP Parse error:  syntax error, unexpected '&' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 142
+[12-Jan-2019 23:04:35 Europe/Berlin] PHP Parse error:  syntax error, unexpected ';' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 169
+[12-Jan-2019 23:06:01 Europe/Berlin] PHP Parse error:  syntax error, unexpected '&' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 183
+[12-Jan-2019 23:06:27 Europe/Berlin] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 184
+[12-Jan-2019 23:06:44 Europe/Berlin] PHP Parse error:  syntax error, unexpected '&' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 185
+[12-Jan-2019 23:21:44 Europe/Berlin] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 192
+[17-Jan-2019 23:00:32 Europe/Berlin] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in C:\xampp\htdocs\stacks2\Brian2\Functions23-1.inc on line 250
+[17-Jan-2019 23:02:19 Europe/Berlin] PHP Fatal error:  Maximum execution time of 30 seconds exceeded in C:\xampp\htdocs\stacks2\Brian2\Functions21-7.inc on line 3851

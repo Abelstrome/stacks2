@@ -1,0 +1,26 @@
+[29-Sep-2018 11:26:09 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:26:09 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../php/www/Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:31:06 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:31:06 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:31:08 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:31:08 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:33:57 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:33:57 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:33:59 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:33:59 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:34:07 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:34:07 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:34:09 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:34:09 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:34:22 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:34:22 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:35:24 Europe/Berlin] PHP Warning:  file_put_contents(../php/www/Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:35:24 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:36:32 Europe/Berlin] PHP Warning:  file_put_contents(../Logs/comment_log.txt): failed to open stream: No such file or directory in C:\xampp\htdocs\stacks\Brian\Functions1-5.inc on line 3425
+[29-Sep-2018 11:36:32 Europe/Berlin] PHP Fatal error:  require(): Failed opening required '../../Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:41:22 Europe/Berlin] PHP Fatal error:  require(): Failed opening required 'C:/xampp/Alison/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:41:54 Europe/Berlin] PHP Fatal error:  require(): Failed opening required 'C:/xampp/Alison2/blah.ini' (include_path='C:\xampp\php\PEAR') in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 16
+[29-Sep-2018 11:43:24 Europe/Berlin] PHP Fatal error:  Call to a member function execute() on null in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 193
+[29-Sep-2018 11:43:36 Europe/Berlin] PHP Fatal error:  Call to a member function execute() on null in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 193
+[29-Sep-2018 11:44:30 Europe/Berlin] PHP Fatal error:  Call to a member function execute() on null in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 193
+[29-Sep-2018 11:44:47 Europe/Berlin] PHP Fatal error:  Call to a member function execute() on null in C:\xampp\htdocs\stacks\Brian\Functions3.inc on line 193

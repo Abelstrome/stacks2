@@ -1,0 +1,1886 @@
+<?php
+/*
+Stacks version 2. Players can now move more than one counter at a time in the playing area.
+In version 1 a player can only ever move 1 counter at a time so long the current stack was of equal or greater height as the next. Now up to n counters can be moved together so long as the current stack is n-1 counters taller than the next. (When the current and next stacks are of equal height then only 1 counter can be moved.) The ownership of the counters that are moved doesn't change so a player can move his opponent's counters.
+All other rules are the same as before.
+*/
+
+//Global variables for database queries
+$qryAddPlayer; $qrySelectPlayer; 
+$qryUpdateRefs; $qrySelectRefs; 
+$qryAddStack; $qrySelectStack; $qryUpdateStack;
+$qryAddGame; $qrySelectGame; $qryUpdateGame; $qrySelectGamesForPlayer;
+$qryAddCounter; $qrySelectCounters; $qryUpdateCounter; $qrySelectAllCounters;
+$qrySelectOpenGames; 
+$qryLogMessage; $qryTidyLog;
+
+//Global variables
+$tbP1NewPlyrName; $tbP1NewGameRef; $tbP1OldGameRef;
+$tbP2NewPlyrName; $tbP2NewGameRef; $tbP2OldGameRef;
+
+//for message logging
+$callString;
+
+function fnDbConnect() {
+	global $qryAddPlayer, $qrySelectPlayer;
+	global $qryUpdateRefs, $qrySelectRefs;
+	global $qryAddStack, $qrySelectStack, $qryUpdateStack;
+	global $qryAddGame, $qrySelectGame, $qryUpdateGame, $qrySelectGamesForPlayer;
+	global $qryAddCounter, $qrySelectCounters, $qryUpdateCounter, $qrySelectAllCounters   ;
+	global $qrySelectOpenGames;
+	global $qryLogMessage, $qryTidyLog;
+	global $callString;
+
+	require '/home/vhosts/www.milophillip.xyz/Alison/blah.ini';
+	$servername = Servername;
+	$username = Username;
+	$password = Password;
+	$dbname = Dbname;	
+	
+	try {
+		$conn = new PDO("mysql:host=$servername;dbname=".$dbname, $username, $password);
+		// set the PDO error mode to exception
+		$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+		
+		//prepare database queries ready for use later
+		
+		//store logging info
+		$query = "INSERT INTO logging SET LogMessage = :logMessage, CallString = :callString";
+		$qryLogMessage = $conn->prepare($query);
+		
+		//tidy log by deleteing messages over 1 day old
+		$query = "SELECT * FROM logging WHERE TimeStamp < CURRENT_DATE - INTERVAL 1 DAY";
+		$qryTidyLog = $conn->prepare($query);
+		
+		//Select references
+		$query = "SELECT NextGameRef, NextPlayerRef from reference";
+		$qrySelectRefs = $conn->prepare($query);
+		
+		//Update references
+		$query = "UPDATE reference SET NextPlayerRef = :playerRef, NextGameRef = :gameRef WHERE RefRecID = 1";
+		$qryUpdateRefs = $conn->prepare($query);
+		
+		//Select player record
+		$query = "SELECT * from players WHERE PlayerName = :playerName";
+		$qrySelectPlayer = $conn->prepare($query);
+		
+		//Add new player record
+		$query = "INSERT INTO players SET PlayerRef = :playerRef, PlayerName = :playerName, Password = :password, Hint = :hint";
+		$qryAddPlayer = $conn->prepare($query);
+		
+		//Add new stack record
+		$query = "INSERT INTO stacks SET GameRef = :gameRef, StackNum = :stackNum, StackHeight = :stackHeight, Top = :top, TurnCount = :turnCount";
+		$qryAddStack = $conn->prepare($query);
+		
+		//Select stack records
+		$query = "SELECT * FROM stacks WHERE GameRef = :gameRef AND TurnCount = :turnCount ORDER BY StackNum" ; 
+		$qrySelectStack = $conn->prepare($query);
+		
+		//Update stack record
+		$query = "UPDATE stacks SET StackNum = :stackNum, StackHeight = :stackHeight, Top = :top WHERE StackRecID = :stackRecID";
+		$qryUpdateStack = $conn->prepare($query);
+		
+		//Add new counters record
+		$query = "INSERT INTO counters SET GameRef = :gameRef, StackNum = :stackNum, PlayerRef = :playerRef, CounterHeight = :counterHeight, TurnCount = :turnCount";
+		$qryAddCounter = $conn->prepare($query);
+		
+		//Update counters record
+		$query = "UPDATE counters SET GameRef = :gameRef, StackNum = :stackNum, PlayerRef = :playerRef, CounterHeight = :counterHeight WHERE CounterRecID = :counterRecID" ;
+		$qryUpdateCounter = $conn->prepare($query);
+		
+		//Select counters records
+		$query = "SELECT * FROM counters WHERE GameRef = :gameRef AND StackNum = :stackNum AND TurnCount = :turnCount ORDER BY CounterHeight" ;
+		$qrySelectCounters = $conn->prepare($query);
+		
+		//Select all counters records
+		$query = "SELECT * FROM counters WHERE GameRef = :gameRef AND TurnCount = :turnCount" ;
+		$qrySelectAllCounters = $conn->prepare($query);
+		
+		//Add new game record
+		$query = "INSERT INTO games SET GameRef=:gameRef, P1Ref=:p1Ref, P2Ref=:p2Ref, LastPlayer=:lastPlayer, StartDate=:startDate, ";
+		$query = $query . "LastUpdated=:lastUpdated, AreaSize=:areaSize, Winner=:winner, TurnCount=:turnCount, TurnCountVer=:turnCountVer";
+		$qryAddGame = $conn->prepare($query);
+
+		//Update game
+		$query = "UPDATE games SET P1Ref=:p1Ref, P2Ref=:p2Ref, LastPlayer=:lastPlayer, StartDate=:startDate, ";
+		$query = $query . "LastUpdated=:lastUpdated, AreaSize=:areaSize, Winner=:winner, TurnCount=:turnCount WHERE GameRef=:gameRef AND TurnCountVer=:turnCountVer";
+		$qryUpdateGame = $conn->prepare($query);
+		
+		//Select game record
+		$query = "SELECT games.GameRef, games.P1Ref, p1.PlayerName AS P1Name, games.P2Ref, p2.PlayerName AS P2Name, games.LastPlayer, LP.PlayerName as LPName, ";
+		$query = $query . "games.StartDate, games.AreaSize, games.Winner, games.TurnCount FROM games INNER JOIN players AS p1 ON games.P1Ref = p1.PlayerRef ";
+		$query = $query . "INNER JOIN players AS p2 ON games.P2Ref = p2.PlayerRef INNER JOIN players AS LP ON games.LastPlayer = LP.PlayerRef ";
+		$query = $query . "WHERE games.GameRef = :gameRef AND games.TurnCountVer = :turnCountVer";
+		$qrySelectGame = $conn->prepare($query);
+		
+		//Select game records for player
+		$query = "SELECT * FROM games WHERE (P1Ref = :playerRef OR P2Ref = :playerRef) AND TurnCountVer = :turnCountVer";
+		$qrySelectGamesForPlayer = $conn->prepare($query);
+		
+		//Select open games and join with players table to get player name
+		$query = "SELECT games.GameRef, games.P1Ref, players.PlayerName FROM games, players WHERE games.P1Ref = players.PlayerRef AND games.P2Ref = 0";
+		$qrySelectOpenGames = $conn->prepare($query);
+	
+		fnLogMessageToDb("Connection successful");
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("Connection failed: " . $e->getMessage());
+		}	
+}
+//End fnDbConnect
+function fnLogMessageToDb ($logMessage) {
+	global $qryLogMessage;
+	global $callString;
+	//execute prepared query
+	try {
+		//execute query
+		$qryLogMessage->execute(array(':logMessage'=>$logMessage, ':callString'=>$callString));
+		}
+	catch(PDOException $e)
+		{
+		echo "<br/>" . "qryLogMessage failed: " . $e->getMessage() . "<br/>";
+		}
+}
+//End fnLogMessageToDb
+function fnQryTidyDbLog () {
+	fnLogMessageToDb("Start fnQryTidyDbLog");
+	global $qryTidyLog; 
+	//execute prepared query
+	try {
+		//execute query
+		$qryTidyLog->execute();
+		//return number of rows that were deleted
+		return $qryTidyLog->rowcount();
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryTidyDbLog failed: " . $e->getMessage());
+		}
+}
+//End fnQryTidyDbLog
+function fnQrySelectGamesForPlayer ($playerRef, $turnCountVer=0) {
+	fnLogMessageToDb("start fnQrySelectGamesForPlayer");
+	global $qrySelectGamesForPlayer;
+
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectGamesForPlayer->execute(array(':playerRef'=>$playerRef,':turnCountVer'=>$turnCountVer));
+		// set the resulting array to associative
+		$result = $qrySelectGamesForPlayer->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectGamesForPlayer->fetchAll() as $aGameRow) { 
+			$gameRows[] = $aGameRow;
+			$rowCount++; }
+		
+		if ($rowCount>0) {
+			return $gameRows; }
+		else {
+			fnLogMessageToDb("no games found for player ref ".$playerRef);
+			return "no games found for player ref ".$playerRef; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectGamesForPlayer failed: " . $e->getMessage());
+		}	
+}
+//End fnQrySelectGamesForPlayer
+function fnQrySelectGame ($gameRef, $turnCountVer=0) {
+	fnLogMessageToDb("start fnQrySelectGame");
+	global $qrySelectGame;
+
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectGame->execute(array(':gameRef'=>$gameRef,':turnCountVer'=>$turnCountVer));
+		// set the resulting array to associative
+		$result = $qrySelectGame->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectGame->fetchAll() as $gameRow) { 
+			$rowCount++; }
+		
+		if ($rowCount==1) {
+			return $gameRow; }
+		elseif ($rowCount>1) {
+			fnLogMessageToDb("Game ".$gameRef." has ".$rowCount." duplicate rows");
+			return "duplicate rows: ".$rowCount; }
+		else {
+			fnLogMessageToDb("Game ".$gameRef." not found");
+			return "Game ".$gameRef." not found"; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectGame failed: " . $e->getMessage());
+		}	
+	fnLogMessageToDb("exit fnQrySelectGame");
+}
+//End fnQrySelectGame
+function fnQryAddGame ($gameRef, $p1Ref, $p2Ref, $lastPlayer, $startDate, $lastUpdated, $areaSize, $winner, $turnCount, $turnCountVer) {
+	fnLogMessageToDb("start fnQryAddGame");
+	global $qryAddGame;
+	//execute prepared query
+	try {
+		//execute query
+		$qryAddGame->execute(array(':gameRef'=>$gameRef,':p1Ref'=>$p1Ref,':p2Ref'=>$p2Ref,':lastPlayer'=>$lastPlayer,':startDate'=>$startDate,':lastUpdated'=>$lastUpdated,':areaSize'=>$areaSize,':winner'=>$winner,':turnCount'=>$turnCount,':turnCountVer'=>$turnCountVer));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryAddGame failed: " . $e->getMessage());
+		}
+}
+//End fnQryAddGame
+function fnQryUpdateGame ($gameRef, $p1Ref, $p2Ref, $lastPlayer, $startDate, $lastUpdated, $areaSize, $winner, $turnCount, $turnCountVer=0) {
+	fnLogMessageToDb("start fnQryUpdateGame");
+	global $qryUpdateGame;
+	$lastUpdated = date("Y-m-d H:i:s");
+	//execute prepared query
+	try {
+		//execute query
+		$qryUpdateGame->execute(array(':gameRef'=>$gameRef,':p1Ref'=>$p1Ref,':p2Ref'=>$p2Ref,':lastPlayer'=>$lastPlayer,':startDate'=>$startDate,':lastUpdated'=>$lastUpdated,':areaSize'=>$areaSize,':winner'=>$winner,':turnCount'=>$turnCount,':turnCountVer'=>$turnCountVer));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryUpdateGame failed: " . $e->getMessage());
+		}
+}
+//End fnQryUpdateGame
+function fnQryUpdateStack($stackNum, $stackHeight, $top, $stackRecID) {
+	fnLogMessageToDb("start fnQryUpdateStack");
+	global $qryUpdateStack;
+	//execute prepared query
+	try {
+		//execute query
+		$qryUpdateStack->execute(array(':stackNum'=>$stackNum, ':stackHeight'=>$stackHeight, ':top'=>$top, ':stackRecID'=>$stackRecID ));
+		}
+	catch(PDOException $e)
+		{
+		// . "qryUpdateStack failed: " . $e->getMessage() . "<br/>";
+		fnLogMessageToDb("qryUpdateStack failed: " . $e->getMessage());
+		}
+}
+//End fnQryUpdateStack
+function fnQryAddStack ($gameRef, $stackNum, $stackHeight, $top, $turnCount) {
+	fnLogMessageToDb("start fnQryAddStack");	
+	global $qryAddStack;
+	//execute prepared query
+	try {
+		//execute query
+		$qryAddStack->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':stackHeight'=>$stackHeight, ':top'=>$top, 'turnCount'=>$turnCount));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryAddStack failed: " . $e->getMessage());
+		}
+}
+//End fnQryAddStack
+function fnQrySelectStacks ($gameRef, $turnCount) {
+	fnLogMessageToDb("start fnQrySelectStacks");	
+	global $qrySelectStack;
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectStack->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
+		// set the resulting array to associative
+		$result = $qrySelectStack->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectStack->fetchAll() as $aStackRow) { 
+			//add an extra column that will be used to flag if the row has been changed
+			array_push($aStackRow,"N");
+			$stackRows[] = $aStackRow;
+			$rowCount++; }
+		
+		if ($rowCount>1) {
+			//echo "multiple rows: ".$rowCount;
+			fnLogMessageToDb("multiple rows: ".$rowCount);
+			return $stackRows;	}
+		else {
+			fnLogMessageToDb("stacks not found for gameRef ".$gameRef);
+			return "stack not found"; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectStack failed: " . $e->getMessage());
+		}
+}
+//End fnQrySelectStacks
+function fnQryAddCounter ($gameRef, $stackNum, $playerRef, $counterHeight, $turnCount) {
+	fnLogMessageToDb("start fnQryAddCounter");	
+	global $qryAddCounter;
+	//execute prepared query
+	try {
+		//execute query
+		$qryAddCounter->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':playerRef'=>$playerRef, ':counterHeight'=>$counterHeight, ':turnCount'=>$turnCount));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryAddCounter failed: " . $e->getMessage());
+		}
+}
+//End fnQryAddCounter
+function fnQrySelectCounters ($gameRef, $stackNum, $turnCount) {
+	fnLogMessageToDb("start fnQrySelectCounters");	
+	global $qrySelectCounters;
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectCounters->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':turnCount'=>$turnCount));
+		// set the resulting array to associative
+		$result = $qrySelectCounters->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectCounters->fetchAll() as $aCountersRow) { 
+			//add an extra column that will be used to flag if the row has been changed
+			array_push($aCountersRow,"N");
+			$countersRows[] = $aCountersRow;
+			$rowCount++; }
+		
+		if ($rowCount>0) {
+			//print_r($countersRows);
+			return $countersRows; }
+		else {
+			fnLogMessageToDb("counters not found for game " . $gameRef . " and stack " . $stackNum . " and turn count " . $turnCount);
+			return "counters not found"; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectCounters failed: " . $e->getMessage());
+		}
+}
+//End fnQrySelectCounters
+function fnQrySelectAllCounters ($gameRef, $turnCount) {
+	fnLogMessageToDb("start fnQrySelectAllCounters");	
+	global $qrySelectAllCounters;
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectAllCounters->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
+		// set the resulting array to associative
+		$result = $qrySelectAllCounters->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectAllCounters->fetchAll() as $aCountersRow) { 
+			$countersRows[] = $aCountersRow;
+			$rowCount++; }
+		
+		if ($rowCount>0) {
+			//print_r($countersRows);
+			return $countersRows; }
+		else {
+			fnLogMessageToDb("counters not found for game " . $gameRef . " and turn count " . $turnCount);
+			return "counters not found"; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectAllCounters failed: " . $e->getMessage());
+		}
+}
+//End fnQrySelectAllCounters
+function fnQryUpdateCounters ($gameRef, $stackNum, $playerRef, $counterHeight, $counterRecID) {
+	fnLogMessageToDb("start fnQryUpdateCounters");	
+	global $qryUpdateCounter;
+	//execute prepared query
+	try {
+		//execute query
+		$qryUpdateCounter->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':playerRef'=>$playerRef, ':counterHeight'=>$counterHeight, ':counterRecID'=>$counterRecID));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryAddCounter failed: " . $e->getMessage() );
+		}
+}
+//End fnQryUpdateCounters
+function fnQrySelectPlayer ($playerName) {
+	fnLogMessageToDb("start fnQrySelectPlayer");
+	global $qrySelectPlayer;
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query
+		$qrySelectPlayer->execute(array(':playerName'=>$playerName));
+		// set the resulting array to associative
+		$result = $qrySelectPlayer->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectPlayer->fetchAll() as $playerRow) { 
+			$rowCount++; }
+		
+		if ($rowCount==1) {
+			//.$playerRow['PlayerName'].$playerRow['PlayerRef'];
+			return $playerRow; }
+		elseif ($rowCount>1) {
+			//echo "duplicate rows: ".$rowCount;
+			fnLogMessageToDb("duplicate rows: ".$rowCount);
+			return "duplicate rows: ".$rowCount." for player name ".$playerName;}
+		else {
+			fnLogMessageToDb("player name - ".$playerName." - not found");
+			return "player not found"; }
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectPlayer failed: " . $e->getMessage());
+		}
+}
+//End fnQrySelectPlayer
+function fnQryAddPlayer($playerRef,$playerName,$password,$hint) {
+	fnLogMessageToDb("start fnQryAddPlayer");	
+	global $qryAddPlayer;
+	//execute prepared query
+	try {
+		//execute query
+		$qryAddPlayer->execute(array(':playerRef' => $playerRef, ':playerName' => $playerName, ':password' => $password, ':hint' => $hint));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryAddPlayer failed: " . $e->getMessage());
+		return $e->getMessage();
+		}
+	return array();
+}
+//End fnQryAddPlayer
+function fnQrySelectRefs() {
+	fnLogMessageToDb("start fnQrySelectRefs");	
+	global $qrySelectRefs;
+	$rowCount = 0; 
+	//execute prepared query
+	try {
+		//execute query
+		$qrySelectRefs->execute();
+		// set the resulting array to associative
+		$result = $qrySelectRefs->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectRefs->fetchAll() as $refsRow) { 
+			$rowCount++; }
+		
+		if ($rowCount==1) {
+			return $refsRow; }
+		else {
+			fnLogMessageToDb("incorrect number of rows: ".$rowCount);
+			return "incorrect number of rows: ".$rowCount;	}
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectRefs failed: " . $e->getMessage());
+		}
+}
+//End fnQrySelectRefs
+function fnQryUpdateRefs($playerRef,$gameRef) {
+	fnLogMessageToDb("start fnQryUpdateRefs");	
+	global $qryUpdateRefs;
+	//execute prepared query
+	try {
+		//execute query
+		$qryUpdateRefs->execute(array(':playerRef' => $playerRef, ':gameRef' => $gameRef));
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qryUpdateRefs failed: " . $e->getMessage());
+		}
+}
+//End fnQryUpdateRefs
+function fnReferencesTable ($method) {
+	fnLogMessageToDb("start fnReferencesTable");
+	//get refs from db
+	$refsRow = fnQrySelectRefs();
+	$playerRef = $refsRow['NextPlayerRef'];
+	$gameRef = $refsRow['NextGameRef'];
+
+	//update refs as required 
+	switch ($method) {
+		case "new game ref":
+			$nextPlayerRef = $playerRef;
+			$nextGameRef= $gameRef + 1;
+			break;
+		
+		case "new both":
+			$nextPlayerRef = $playerRef+1;
+			$nextGameRef= $gameRef + 1;
+			break;
+		
+		case "new player ref":
+			$nextPlayerRef = $playerRef+1;
+			$nextGameRef= $gameRef;
+			break;
+	
+		default:
+			$nextPlayerRef = 0;
+			$nextGameRef= 0;
+			break;
+	}
+	
+	//update db
+	if ($nextGameRef==0) {
+		fnLogMessageToDb("invalid method: ".$method);
+		return "invalid method: ".$method; }
+	else {
+		fnQryUpdateRefs ($nextPlayerRef,$nextGameRef);
+		return $refsRow; }
+}
+//End fnReferencesTable
+function fnQrySelectOpenGames() {
+	fnLogMessageToDb("start fnQrySelectOpenGames");
+	global $qrySelectOpenGames;
+	$rowCount = 0; 
+	//execute prepared query
+	try {
+		//execute query
+		$qrySelectOpenGames->execute();
+		// set the resulting array to associative
+		$result = $qrySelectOpenGames->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectOpenGames->fetchAll() as $aGamesRow) { 
+			$openGamesRows[] = $aGamesRow;
+			$rowCount++; }
+
+		if ($rowCount>0) {
+			return $openGamesRows; }
+		else {
+			return "no open games found";	}
+		}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("qrySelectOpenGames failed: " . $e->getMessage());
+		}	
+}
+//End fnQrySelectOpenGames
+function fnDbDisconnect() {
+	try {
+		$conn=null;
+		fnLogMessageToDb("Disconnected successfully");
+	}
+	catch(PDOException $e)
+		{
+		fnLogMessageToDb("Disconnect failed: " . $e->getMessage());
+		}
+}
+//End fnDbDisconnect
+function fnValidatePlayerNamePW($playerNamePW) {
+	fnLogMessageToDb("Start fnValidatePlayerNamePW"); 
+	//separate player name and PIN
+	//search for slash
+	$inx = strpos($playerNamePW,"/",0); 
+	if ($inx == FALSE){
+		$errCode = "VP-1";
+		$errMsg = "PIN not found - separator missing: ".$playerNamePW;
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+	$playerName = substr($playerNamePW,0,$inx);
+	$password = substr($playerNamePW,$inx+1,strlen($playerNamePW)-$inx);
+	//search for player name
+	$playerRow =fnQrySelectPlayer($playerName);
+	if (is_string($playerRow)) {
+		$errCode = "VP-2";
+		$errMsg = "Error finding player name record for " . $playerName;
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+	elseif ($password != $playerRow['Password']){
+		$errCode = "VP-3";
+		$errMsg = "Player name and\or PIN is incorrect: ".$playerName."/".$password;
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+	//all good so return player ref
+	return $playerRow['PlayerRef'];
+	
+}
+//End fnValidatePlayerNamePW
+function fnValidatePlay($tbPOldGameRef,$tbPOldPlyrRef,$tbPMovePos,$tbPMoveCount,$procMove = "Y") {
+	fnLogMessageToDb("start fnValidatePlay");
+	$errMsg = ""; $errCode = "";
+
+	//set up play inputs from player 1 or player 2
+	$movePos = $tbPMovePos;
+	$moveCount = $tbPMoveCount;
+
+	//get game record
+	if (strlen($tbPOldGameRef)>0) {
+		$gameRef = $tbPOldGameRef;}
+	else {
+		$errMsg = "Game ref not found in subValidatePlay. Fatal error.";
+		$errCode = "VPY-1";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+
+	$gameRow = fnQrySelectGame($gameRef); 
+	if (is_string($gameRow)) {
+		$errMsg = "Game " . $gameRef . " not found";
+		$errCode = "VPY-2";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+
+	if ($gameRow['Winner'] != 0){
+		$errMsg = "Game " . $gameRef . " has already been won";
+		$errCode = "VPY-3";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+		
+	if ($tbPOldPlyrRef == $gameRow['P1Ref']) {
+		$player1or2 = 1;}
+	elseif ($tbPOldPlyrRef == $gameRow['P2Ref']) {
+		$player1or2 = 2;}
+	else {
+		$errMsg = "Incorrect player ".$tbPOldPlyrRef;
+		$errCode = "VPY-4";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+		
+	//1. Check it is the right player taking a turn.
+	if ($player1or2 == 1) {
+		if ($gameRow['LastPlayer'] == $gameRow['P1Ref']) {
+			$errMsg = "Not player 1's turn";
+			$errCode = "VPY-H";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+	}
+	else {
+		if ($gameRow['LastPlayer'] == $gameRow['P2Ref']) {
+			$errMsg = "Not player 2's turn";
+			$errCode = "VPY-5";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+	}
+
+	//move position must not be blank or greater than areaSize
+	if ($movePos > $gameRow['AreaSize']) {
+		$errMsg = "Player " . $player1or2 . ": Invalid move position";
+		$errCode = "VPY-7";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+
+	//move count can be blank unless the move position is 0
+	if ($moveCount == 0) {
+		if ($movePos == 0) {
+			$errMsg = "Player " . $player1or2 . ": Invalid move count";
+			$errCode = "VPY-8";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+		else {
+			//not moving reserve so assume move count is 1
+			$moveCount = 1; }
+	}
+/*
+	//move count must be 1 if move position is > 0
+	if ($movePos > 0 And $moveCount <> 1) {
+		$errMsg = "Player " . $player1or2 . ": Invalid move count";
+		$errCode = "VPY-9";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+*/		
+	//get stack records
+	$stackRows = fnQrySelectStacks($gameRef,0);
+	if (is_string($stackRows)) {
+		$errMsg = "Stack not found in sub ValidatePlay. Fatal error.(P" . $player1or2 . ")";
+		$errCode = "VPY-A";
+		fnLogMessageToDb($errCode.$errMsg);
+		return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+
+	
+	//the move count must be less than or equal to the stack height
+	if ($player1or2 == 1) {
+   	if ($moveCount > $stackRows[$movePos]['StackHeight']) {
+			$errMsg = "Player 1: Invalid move count";
+			$errCode = "VPY-B";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+	}
+	else {
+		if ($moveCount > $stackRows[$gameRow['AreaSize'] + 1 - $movePos]['StackHeight']){
+			$errMsg = "Player 2: Invalid move count";
+			$errCode = "VPY-C";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+	}
+	if ($movePos !== 0) {
+		//the move position is not for the reserve so ...
+		if ($player1or2 == 1) {
+			//... the top counter must belong to player 1
+			if ($stackRows[$movePos]['Top'] <> $gameRow['P1Ref']) {
+				$errMsg = "Player 2: Invalid move position";
+				$errCode = "VPY-D";
+				fnLogMessageToDb($errCode.$errMsg);
+				return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+			//... and the next stack must not be higher than the current one less the move count plus 1 (this limits how many counters can be moved)
+			elseif ($stackRows[$movePos+1]['StackHeight'] > $stackRows[$movePos]['StackHeight'] - $moveCount + 1 ) {
+				$errMsg = "Player 1: Invalid move position. Move pos=" . $movePos;
+				$errCode = "VPY-E";
+				fnLogMessageToDb($errCode.$errMsg);
+				return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+		}
+		else {
+			//... the top counter must belong to player 2
+			if ($stackRows[$gameRow['AreaSize']+1 - $movePos]['Top'] <> $gameRow['P2Ref']) {
+				$errMsg = "Player 2: Invalid move position";
+				$errCode = "VPY-F";
+				fnLogMessageToDb($errCode.$errMsg);
+				return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+			//... and the next stack must not be higher than the current one less the move count plus 1 (this limits how many counters can be moved) 
+			elseif ($stackRows[$gameRow['AreaSize']+1 - $movePos -1]['StackHeight'] > $stackRows[$gameRow['AreaSize']+1 - $movePos]['StackHeight'] - $moveCount + 1) {
+				$errMsg = "Player 2: Invalid move position";
+				$errCode = "VPY-G";
+				fnLogMessageToDb($errCode.$errMsg);
+				return array("errCode"=>$errCode,"errMsg"=>$errMsg); }
+		}
+	}
+	if ($procMove == "Y") {
+		$fnResp = fnProcessMove($movePos, $moveCount, $gameRef, True);
+		$errCode = $fnResp["errCode"];
+		$errMsg = $fnResp["errMsg"]; }
+
+	return array("errCode"=>$errCode,"errMsg"=>$errMsg); 
+}
+//End fnValidatePlay
+function fnProcessMove ($movePos, $moveCount, $gameRef, $silent) {
+	fnLogMessageToDb("start fnProcessMove");
+	//Move a player's counters either out of the reserve or across the playing area
+	$errMsg = ""; $errCode = "";
+
+	$gameRow = fnQrySelectGame($gameRef);
+	if (is_string($gameRow)) {
+		$errMsg = "Game " . $gameRef . " not found";
+		$errCode = "PMO-1";
+		return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+
+	
+	//"get stacks";
+	$stackRows = fnQrySelectStacks($gameRef,0);
+	if (is_string($stackRows)) {
+		$errMsg = "Game step not found. Fatal error.";
+		$errCode = "PMO-2";
+		return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+
+	if ($movePos == 0) {
+		//Process move where player is using their reserve ";
+		//check whose turn it is and adjust game step";
+		if ($gameRow['LastPlayer'] == $gameRow['P1Ref']) {
+			//player 2's move";
+			$stackNum = $gameRow['AreaSize'] + 1;
+			$playerRef = $gameRow['P2Ref'];}
+		else {
+			// player 1's move";
+			$stackNum = 0;
+			$playerRef = $gameRow['P1Ref']; }
+		//."b. Subtract Move Count from the height of player X reserve";
+		$stackRows[$stackNum]['StackHeight'] = $stackRows[$stackNum]['StackHeight'] - $moveCount;
+		$stackRows[$stackNum][0] = "Y"; //mark for update
+
+		//Reset the reserve to match the number of counters that remain by moving the Layer records that are no longer in the reserve to the first step in the playing area";
+		$countersRows = fnQrySelectCounters($gameRef,$stackNum,0);
+		if (is_string($countersRows)) {
+			$errMsg = "Counter records not found. Fatal error";
+			$errCode = "PMO-2A";
+			return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+
+		for ($i = $stackRows[$stackNum]['StackHeight'] + 1; $i <= $stackRows[$stackNum]['StackHeight'] + $moveCount; $i++) {   
+			//move the counter forward by updating the StepNum";
+			if ($stackNum == 0) {
+				//stackNum = 0 i.e. player 1";
+				$countersRows[$i - 1]['StackNum'] = $stackNum + 1; 
+				$countersRows[$i - 1][0] = "Y"; //mark row for update
+				$stackRows[$stackNum + 1]['Top'] = $gameRow['P1Ref'];   
+				$stackRows[$stackNum + 1][0] = "Y";} //mark row for update 
+			else {
+				//stackNum != 0 i.e. player 2";
+				$countersRows[$i - 1]['StackNum'] = $stackNum - 1;	
+				$countersRows[$i - 1][0] = "Y"; //mark row for update
+				$stackRows[$stackNum - 1]['Top'] = $gameRow['P2Ref']; 	
+				$stackRows[$stackNum - 1][0] = "Y";} 	//mark row for update 
+			//put the counter rec on top of the stack by updating it's height
+			$countersRows[$i - 1]['CounterHeight'] = $stackRows[$countersRows[$i-1]['StackNum']]['StackHeight'] + $i - $stackRows[$stackNum]['StackHeight'] ;
+		}
+
+		//update the height of the game step";
+		if ($stackNum == 0) {
+			$stackRows[$stackNum+1]['StackHeight'] += $moveCount;}	
+		else {
+			$stackRows[$stackNum-1]['StackHeight'] += $moveCount;}	
+	}
+	//process move in the play area
+	else {
+		//check whose turn it is and adjust game step 
+		if ($gameRow['LastPlayer'] == $gameRow['P1Ref']) {	
+			//player 2's move
+			$stackNum = $gameRow['AreaSize'] + 1 - $movePos;
+			$playerRef = $gameRow['P2Ref']; }
+		else {
+			//player 1's move
+			$stackNum = $movePos;
+			$playerRef = $gameRow['P1Ref']; } 
+
+		//get counter records
+		$countersRows = fnQrySelectCounters($gameRef, $stackNum, 0);
+		if (is_string($countersRows)) {
+			$errMsg = "Counter records not found. Fatal error";
+			$errCode = "PMO-2B";
+			return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+
+		//take one or more counters away from the current step
+		//reduce height of stack by number of counters being moved
+		$stackRows[$stackNum]['StackHeight'] -= $moveCount ;
+		$stackRows[$stackNum][0] = "Y"; //mark row for update 
+		//change top counter	
+		if ($stackRows[$stackNum]['StackHeight'] == 0) {
+			//set top to zero
+			$stackRows[$stackNum]['Top'] = 0; }
+		else {
+			//set top to a number > zero
+			$stackRows[$stackNum]['Top'] = $countersRows[$stackRows[$stackNum]['StackHeight']-1]['PlayerRef']; }	
+
+		//increase height of next stack, move counters and update top";
+		if ($playerRef == $gameRow['P1Ref']) {
+			// player 1";
+			$stackRows[$stackNum+1][0] = "Y"; //mark row for update 		
+  			//move counters 
+    		for ($i = $stackRows[$stackNum]['StackHeight'] + 1; $i <= $stackRows[$stackNum]['StackHeight'] + $moveCount; $i++) {   
+      		$countersRows[$i-1]['StackNum'] = $stackNum + 1 ; 
+        	$countersRows[$i-1][0] = "Y"; //mark row for update
+				$countersRows[$i-1]['CounterHeight'] = $stackRows[$stackNum+1]['StackHeight'] + $i - $stackRows[$stackNum]['StackHeight'] ; }
+			//increase height
+			$stackRows[$stackNum+1]['StackHeight'] += $moveCount ;	
+     	//update top of stack
+			$stackRows[$stackNum+1]['Top'] = $gameRow['P1Ref'] ; }
+		else {
+			// player 2";	
+			$stackRows[$stackNum-1][0] = "Y"; //mark row for update 	
+			//move counters 
+      for ($i = $stackRows[$stackNum]['StackHeight'] + 1; $i <= $stackRows[$stackNum]['StackHeight'] + $moveCount; $i++) {   
+				$countersRows[$i-1]['StackNum'] = $stackNum - 1 ; 
+  				$countersRows[$i-1][0] = "Y"; //mark row for update
+       	$countersRows[$i-1]['CounterHeight'] = $stackRows[$stackNum-1]['StackHeight'] + $i - $stackRows[$stackNum]['StackHeight'] ; }
+			//increase height
+			$stackRows[$stackNum-1]['StackHeight'] += $moveCount  ;
+   		//update top of stack
+			$stackRows[$stackNum-1]['Top'] = $gameRow['P2Ref'] ; }
+
+		//If player has reached the far side of the board then all the counters are moved to the players reserve";
+		if ($playerRef == $gameRow['P1Ref']) { 
+			//player 1";
+			if ($stackNum+1 == $gameRow['AreaSize']) {	
+				//player 1 has reached the far side of the board so ...";
+				//save layer updates
+				for ($i=0; $i < count($countersRows); $i++) {
+					if ($countersRows[$i][0] == "Y") {
+						fnQryUpdateCounters($countersRows[$i]['GameRef'],$countersRows[$i]['StackNum'],$countersRows[$i]['PlayerRef'],$countersRows[$i]['CounterHeight'],$countersRows[$i]['CounterRecID']) ; }
+						}
+				//select counters records for next game step
+				$countersRows = fnQrySelectCounters($gameRow['GameRef'], $stackNum+1, 0);
+				if (is_string($countersRows)) {
+					$errMsg = "Counter records not found. Fatal error";
+					$errCode = "PMO-2C";
+					return array("errcode"=>$errCode,"errMsg"=>$errMsg); }				
+				//move counters and make them belong to player 1
+				for ($i=0; $i<=$stackRows[$stackNum+1]['StackHeight'] - 1; $i++) {		
+					$countersRows[$i]['CounterHeight']= $stackRows[0]['StackHeight'] + 1 + $i;	
+					$countersRows[$i]['StackNum'] = 0; 
+					$countersRows[$i]['PlayerRef'] = $gameRow['P1Ref'];	
+					$countersRows[$i][0] = "Y"; } 	//flag for update 			
+				//increase height of reserve
+				$stackRows[0]['StackHeight'] += $stackRows[$stackNum+1]['StackHeight'];
+				$stackRows[0][0] = "Y";  //flag for update 				
+				//reset height of far side of board
+				$stackRows[$stackNum+1]['StackHeight'] = 0;
+				$stackRows[$stackNum+1]['Top'] = 0; 	
+				$stackRows[$stackNum+1][0] = "Y";  //flag for update 
+			}
+		}
+		else {
+			//echo " - player 2";
+			if ($stackNum-1 == 1) {
+				//player 2 has read the far side of the board so ...";
+				//save layer updates
+				for ($i=0; $i < count($countersRows); $i++) {
+					if ($countersRows[$i][0] == "Y") {
+						fnQryUpdateCounters($countersRows[$i]['GameRef'],$countersRows[$i]['StackNum'],$countersRows[$i]['PlayerRef'],$countersRows[$i]['CounterHeight'],$countersRows[$i]['CounterRecID']);
+					}
+				}
+				//select layer records for next game step";		
+				$countersRows = fnQrySelectCounters($gameRow['GameRef'], $stackNum-1,0);
+				if (is_string($countersRows)) {
+					$errMsg = "Counter records not found. Fatal error";
+					$errCode = "PMO-2D";
+					return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+				//move counters and make them belong to player 2
+				for ($i= 0; $i<= $stackRows[$stackNum-1]['StackHeight'] - 1; $i++) { 
+					$countersRows[$i]['CounterHeight'] = $stackRows[$gameRow['AreaSize']+1]['StackHeight'] + 1 + $i; 	
+					$countersRows[$i]['StackNum'] = $gameRow['AreaSize'] + 1;
+					$countersRows[$i]['PlayerRef'] = $gameRow['P2Ref'];	
+					$countersRows[$i][0] = "Y"; } 	//mark for update
+				//increase height of reserve
+				$stackRows[$gameRow['AreaSize']+1]['StackHeight'] += $stackRows[$stackNum-1]['StackHeight'];
+				$stackRows[$gameRow['AreaSize']+1][0] = "Y";  //flag for update 			
+				//reset height of far side of board
+				$stackRows[$stackNum-1]['StackHeight'] = 0;	
+				$stackRows[$stackNum-1]['Top'] = 0;	
+				$stackRows[$stackNum-1][0] = "Y";	//mark for update
+			}
+		}
+	}
+	//check to see if the next player has any moves available
+	if ($playerRef == $gameRow['P2Ref']) {
+		//player 2 has moved so check if player 1 has lost";
+		if (fnCheckLoser($gameRow['P1Ref'], $stackRows)) {
+			$gameRow['Winner'] = $playerRef; $gameRow['LastPlayer'] = $gameRow['P2Ref'];
+			$errMsg = "Player " . $playerRef . " has won the game."; 
+			$errCode = "PMO-3"; }
+		else {
+			//player 2 has moved but not won so check if player 1 has any moves";
+			$anyMoves = False;
+			if ($stackRows[0]['StackHeight'] > 0) {		
+				$anyMoves = True;}
+			else {
+				for ($i = 1; $i<=$gameRow['AreaSize']-1; $i++) {	
+					if ($stackRows[$i]['StackHeight'] >= $stackRows[$i+1]['StackHeight'] And $stackRows[$i]['Top'] == $gameRow['P1Ref']) {
+						$anyMoves = True;
+						break; }
+				}
+			}
+			if ($anyMoves) {
+				//player 1 has moves available so switch turns";
+				$gameRow['LastPlayer'] = $gameRow['P2Ref'];}
+			else {
+				$errMsg = "Player " . $gameRow['P1Ref'] . " has no moves available. Miss a turn."; }
+				$errCode = "PMO-4";
+		}
+	}
+	else {
+		//player 1 has moved so check if player 2 has lost";
+		if (fnCheckLoser($gameRow['P2Ref'], $stackRows)) {
+			$gameRow['Winner'] = $playerRef; $gameRow['LastPlayer'] = $gameRow['P1Ref'];
+			$errMsg = "Player " . $playerRef . " has won the game."; 
+			$errCode = "PMO-5"; }
+		else {
+			//player 1 has moved but not won so check if player 2 has any moves";
+			$anyMoves = False;
+			if ($stackRows[$gameRow['AreaSize']+1]['StackHeight'] > 0) {
+				$anyMoves = True; }
+			else {
+				for ($i=$gameRow['AreaSize']; $i>=2; $i--) { 
+					if ($stackRows[$i]['StackHeight'] >= $stackRows[$i-1]['StackHeight'] And $stackRows[$i]['Top'] == $gameRow['P2Ref']) {
+						$anyMoves = True;
+						break; }
+				}
+			}
+			if ($anyMoves) {
+				//player 2 has moves available so switch turns";
+				$gameRow['LastPlayer'] = $gameRow['P1Ref']; }
+			else {
+				$errMsg = "Player " . $gameRow['P2Ref'] . " has no moves available. Miss a turn."; 
+				$errCode = "PMO-6"; }
+		}
+	}
+
+	//update the last updated time";
+	$gameRow['LastUpdated'] = date("Y-m-d H:i:s");	
+	
+	//increment move count
+	$gameRow['TurnCount'] += 1;	
+
+	//save counter recs
+	for ($i=0; $i<count($countersRows); $i++) {
+		if ($countersRows[$i][0] == "Y") {
+			fnQryUpdateCounters($countersRows[$i]['GameRef'],$countersRows[$i]['StackNum'],$countersRows[$i]['PlayerRef'],$countersRows[$i]['CounterHeight'],$countersRows[$i]['CounterRecID']);
+		}
+	}
+	//save backup of counter records
+	fnLogMessageToDb("saving counters") ;
+	//1. get all counters for this game and turncount 0
+	$countersRows = fnQrySelectAllCounters($gameRef,0);
+	if (is_string($countersRows)) {
+		$errMsg = "Counter records not found. Fatal error";
+		$errCode = "PMO-7";
+		return array("errcode"=>$errCode,"errMsg"=>$errMsg); }
+	//2. save back of this turncount
+	for ($i=0; $i<count($countersRows); $i++) {
+		fnQryAddCounter($countersRows[$i]['GameRef'],$countersRows[$i]['StackNum'],$countersRows[$i]['PlayerRef'],$countersRows[$i]['CounterHeight'], $gameRow['TurnCount']); }
+		
+	//save game rec
+	fnLogMessageToDb("saving game") ;
+	fnQryUpdateGame($gameRow['GameRef'],$gameRow['P1Ref'],$gameRow['P2Ref'],$gameRow['LastPlayer'],$gameRow['StartDate'],$gameRow['LastUpdated'],$gameRow['AreaSize'],$gameRow['Winner'],$gameRow['TurnCount']);
+	// also store a backup
+	fnQryAddGame($gameRow['GameRef'],$gameRow['P1Ref'],$gameRow['P2Ref'],$gameRow['LastPlayer'],$gameRow['StartDate'],$gameRow['LastUpdated'],$gameRow['AreaSize'],$gameRow['Winner'],$gameRow['TurnCount'],$gameRow['TurnCount']);
+	
+	//save stack recs
+	fnLogMessageToDb("saving stacks") ;
+	for ($i=0; $i<count($stackRows); $i++) {
+		if ($stackRows[$i][0] == "Y") {
+			fnLogMessageToDb("stack ".$i);
+			fnQryUpdateStack($stackRows[$i]['StackNum'],$stackRows[$i]['StackHeight'],$stackRows[$i]['Top'],$stackRows[$i]['StackRecID']); } 
+		//also store a backup
+		fnQryAddStack($stackRows[$i]['GameRef'],$stackRows[$i]['StackNum'],$stackRows[$i]['StackHeight'],$stackRows[$i]['Top'],$gameRow['TurnCount']);
+	}
+		
+	//return $errMsg;
+	return array("errcode"=>$errCode,"errMsg"=>$errMsg); 
+}
+//End fnProcessMove
+function fnCheckLoser($playerRef, $stackRows) {
+	fnLogMessageToDb("start fnCheckLoser");
+	//returns True if the given player has lost otherwise False
+
+	//not a loser if there is something in reserve
+	if ($playerRef == $stackRows[0]['Top']) {
+		if ($stackRows[0]['StackHeight'] > 0) {return False; }	
+	}
+	else {
+		if ($stackRows[count($stackRows)-1]['StackHeight'] > 0) {return False; }
+	}
+
+	//not a loser if player has a counter on top of one of the game steps
+	for ($i=1; $i<=count($stackRows)-2; $i++) {	//i As Integer = 1 To dsGameStep.GameStep.Rows.Count - 2
+		if ($playerRef == $stackRows[$i]['Top']) {return False;}	//playerRef = dsGameStep.GameStep(i).Top Then Exit Function
+	}
+
+	//player has lost
+	return True;
+}
+//End fnCheckLoser
+function fnProcessInput($callString) {
+	fnLogMessageToDb("start fnProcessInput");
+	//globals
+	global $tbP1NewPlyrName, $tbP1NewGameRef;
+	global $tbP2NewPlyrName, $tbP2NewGameRef; 
+	
+	//convert call string to upper case
+	$callString = strtoupper($callString);
+	
+	//call function to extract the parameters from the call string
+	$refs=fnFindParams($callString);
+	//print_r($refs);
+
+	$errCode = ""; $errMsg = "";
+	if (substr($refs[0][0],0,2) == "FP") {
+		$errCode = $refs[0][0] ;
+        $errMsg = $refs[0][1] ; }
+	elseif (array_key_exists("TYPE",$refs) == False) {
+		$errCode = "PrI-1";
+		$errMsg = "input string - type param missing"; }
+    else {
+		switch ($refs["TYPE"]){
+			case "P1_NEW_GAME":
+			case "P1NEWGAME":
+				//player name and game central are both optional parameters
+                if (count($refs) > 3) {
+                    //error - too many parameters
+					$errCode = "P1N-1";
+					$errMsg = "P1 New Player - too many parameters";} 
+				elseif (count($refs) == 1) {
+					//error - no parameters
+					$errCode = "P1N-4";
+					$errMsg ="P1 New Player - no parameters"; }	
+				elseif (count($refs) == 2) {
+					//if there is one parameter then it must be Player Name
+                    if (array_key_exists("PLAYERNAME",$refs) == False ) {
+                        //error - only valid parameter is player name
+						$errCode = "P1N-2";
+                        $errMsg = "P1 New Player - only valid parameter is player name"; } }
+				elseif ((array_key_exists("PLAYERNAME",$refs) == False ) or (array_key_exists("GAMECENTRAL",$refs) == False )) {
+					//error - invalid parameters
+					$errCode = "P1N-3";
+					$errMsg ="P1 New Player - invalid parameters"; }
+				elseif (array_key_exists("GAMECENTRAL",$refs) == True And $refs["GAMECENTRAL"] <> "Y" And $refs["GAMECENTRAL"] <>  "N") {
+					//error game central must by y or n
+					$errCode = "P1N-8";
+					$errMsg ="P1 New Player - game central must by y or n"; }
+				
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					if (count($refs) == 2) {
+						//one parameter which must be the player name. Set gameCentral to No
+                        $gameCentral = "N";
+						$tbP1NewPlyrName = $refs["PLAYERNAME"]; }
+					else {
+						//two parameters for both game central and player name
+						fnLogMessageToDb("P1 new game params - player name =" . $refs["PLAYERNAME"] . " and game ref =" . $refs["GAMECENTRAL"]);
+						$gameCentral = $refs["GAMECENTRAL"];
+						$tbP1NewPlyrName = $refs["PLAYERNAME"];}
+						
+					//check the password
+					$fnResp = fnValidatePlayerNamePW($tbP1NewPlyrName); 
+					if (array_key_exists('errCode',$fnResp)) {
+						$errCode = "P1N-7";
+						$errMsg = 'Player Move - player name and/or password is incorrect'; } 
+					else {
+						//extract player name
+						$inx = strpos($tbP1NewPlyrName,"/",0); 
+						$tbP1NewPlyrName = substr($tbP1NewPlyrName,0,$inx); } 
+				}
+				if (strlen($errCode) == 0) {
+					$fnResp = fnProcessNewP1($tbP1NewPlyrName, True); 
+					if (array_key_exists('errCode',$fnResp) == False) {
+                        //Response from fnProcessNewP1 is ok - a numeric fnResp means the new game ref has been returned instead of string error message
+						$gameRef = $fnResp;
+						//call state of play 
+						$fnResp = fnStateOfPlay($gameRef);
+						if (is_array($fnResp)) {
+							$errCode = "    ";
+                            $errMsg = json_encode($fnResp); }
+                        else {
+							$errCode = "P1N-5";
+                            $errMsg = "P1 New Player - error response from state of play"; } }
+					else {
+						//error occurred in fnProcessNewP1
+                        $errCode = "P1N-6";
+                        $errMsg = "P1 New Player - error response from process new player 1"; } 
+						
+					//if state of play has been called successfully then check GAMECENTRAL flag and set up player 2 if required
+					if ($errCode == "    " and $gameCentral == "Y") {
+						$fnResp = fnProcessNewP2($gameRef, "GAMECENTRAL", True);
+						if (strlen($fnResp) > 0) {
+							//errors occurred
+							$errCode = substr($fnResp,0, 5);
+							$errMsg = "error occurred setting up GAMECENTRAL as player 2 [" . substr($fnResp,5,strlen($fnResp)-5) . "]"; } 
+						else {
+							//call state of play 
+							$fnResp = fnStateOfPlay($gameRef);
+							if (is_array($fnResp)) {
+								$errCode = "    ";
+								$errMsg = json_encode($fnResp); }
+							else {
+								$errCode = "P1N-9";
+								$errMsg = "P1 New Player - error response from state of play (for player 2)"; } 
+						}
+					}
+				}
+				break;
+			
+			case "P2_NEW_GAME":
+			case "P2NEWGAME":
+                //must have parameters for gameRef and playerName
+                if (count($refs) !== 3) {
+					//error - incorrect number of parameters
+                    $errCode = "P2N-1";
+                    $errMsg = "P2 New Player - incorrect number of parameters"; }
+                else {
+					//2 parameters - one must be game ref and the other player name. 
+					if (array_key_exists("GAMEREF",$refs) == False) {
+						//error - game ref parameter missing
+						$errCode = "P2N-2";
+						$errMsg = "P2 New Player - game ref parameter missing"; }
+					elseif (array_key_exists("PLAYERNAME",$refs) == False) {
+						//error - player name parameter missing
+						$errCode = "P2N-3";
+						$errMsg = "P2 New Player - the player name parameter is missing"; }
+					elseif (!preg_match('/^[0-9]+$/',$refs["GAMEREF"])) {
+						//game ref must be numeric
+						$errCode = "P2N-4";
+						$errMsg = "P2 New Player - game ref not numeric"; }
+				}
+				
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					$tbP2NewGameRef = $refs["GAMEREF"]; 
+					$tbP2NewPlyrName = $refs["PLAYERNAME"]; 
+
+					//check the password
+					$fnResp = fnValidatePlayerNamePW($tbP2NewPlyrName); 
+					if (array_key_exists('errCode',$fnResp)) {
+						$errCode = "P2N-7/".$fnResp['errCode'];
+						$errMsg = $fnResp['errMsg']; }
+						//$errMsg = "P2 New Player - player name and/or password is incorrect"; } 
+					else {
+						//extract player name
+						$inx = strpos($tbP2NewPlyrName,"/",0); 
+						$tbP2NewPlyrName = substr($tbP2NewPlyrName,0,$inx); }
+				}
+				
+				if (strlen($errCode) == 0) {
+					//all ok so create player 2
+					$fnResp = fnProcessNewP2($tbP2NewGameRef, $tbP2NewPlyrName, True);
+                    //if (strlen($fnResp) == 0) {
+					if (array_key_exists('errCode',$fnResp) == False) {
+                        //all ok
+                        //call state of play and return state of play message
+                        $tbP1NewGameRef = $tbP2NewGameRef;
+                        $fnResp = fnStateOfPlay($tbP1NewGameRef);
+                   
+						if (is_array($fnResp)) {
+                            $errCode = "    ";
+                            $errMsg = json_encode($fnResp);}
+                        else {
+                            $errCode = "P2N-9";
+                            $errMsg = "P2 New Player - error response from state of play";} }
+                    else {
+                        //errors occurred setting up player 2
+                        $errCode = 'P2N-8,'.$fnResp['errCode'];;
+						$errMsg = $fnResp['errMsg'];}
+				}
+				break;
+			
+			case "GAME_STATUS":
+                        case "GAMESTATUS":
+				$turnCount=0;
+				//must have parameters for gameRef; turn count is optional
+				if (count($refs) > 3) {
+					//error - incorrect number of parameters
+					$errCode = "GS-1";
+					$errMsg = "Game Status - incorrect number of parameters"; }				
+				elseif (array_key_exists("GAMEREF",$refs)==False) {
+					//error - game ref parameter missing
+					$errCode = "GS-2";
+					$errMsg = "Game Status - game ref parameter missing"; }
+				elseif (is_numeric($refs["GAMEREF"])==FALSE) {
+					$errCode = "GS-3";
+					$errMsg = "Game Status - game ref not numeric"; }
+				elseif (count($refs) == 3) {
+					if (array_key_exists("TURNCOUNT",$refs)==False) {
+						//error - turn count parameter missing
+						$errCode = "GS-4";
+						$errMsg = "Game Status - turn count parameter missing"; }
+					else {$turnCount = $refs["TURNCOUNT"];}
+				}
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					$tbP2OldGameRef = $refs["GAMEREF"];
+					$fnResp = fnStateOfPlay($tbP2OldGameRef,$turnCount);
+					if (is_array($fnResp)) {
+						$errCode = "    ";
+						$errMsg = json_encode($fnResp);}
+					else {
+						$errCode = substr($fnResp,0,5);
+						$errMsg = substr($fnResp,5,strlen($fnResp)-5);} 
+				}
+				break;
+
+			case "P1_MOVE":
+			case "P1_MOVES":
+			case "P1MOVE":
+			case "P1MOVES":
+			case "P2MOVES":
+			case "P2MOVE":
+			case "P2_MOVE":
+			case "P2_MOVES":
+				//must have parameters for game ref, player name, move pos and move count. 
+				if (count($refs) <> 5) {
+					//error - incorrect number of parameters
+					$errCode = "PM-1";
+					$errMsg = "Player Move - incorrect number of parameters"; }
+				elseif (array_key_exists("GAMEREF",$refs) == False) {
+					//error - game ref parameter missing
+					$errCode = "PM-2";
+					$errMsg = "Player Move - game ref parameter missing";}
+				elseif (array_key_exists("PLAYERNAME",$refs) == False) {
+					//error - player ref parameter missing
+					$errCode = "PM-3";
+					$errMsg = "Player Move - player name parameter missing"; }
+				elseif (array_key_exists("MOVEPOS",$refs) == False) {
+					//error - move position parameter missing
+					$errCode = "PM-4";
+					$errMsg = "Player Move - move position parameter missing"; }
+				elseif (array_key_exists("MOVENUM",$refs) == False) {
+					//error - move count/num parameter missing
+					$errCode = "PM-5";
+					$errMsg = "Player Move - move count/num parameter missing"; }
+
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					if (!preg_match('/^[0-9]+$/',$refs["GAMEREF"])) {
+						//game ref must be numeric
+						$errCode = "PM-7c";
+						$errMsg = "Player Move - game ref, move num and move pos must be numeric"; }
+					else {
+						$tbP1OldGameRef = $refs["GAMEREF"];
+						$tbP2OldGameRef = $refs["GAMEREF"]; 
+					
+						$fnResp = fnValidatePlayerNamePW($refs["PLAYERNAME"]); 
+						if (array_key_exists('errCode',$fnResp)) {
+							$errCode = "PM-6";
+							$errMsg = "Player Move - player name and\or PIN is incorrect"; }
+						else {
+							$tbPOldPlyrRef = $fnResp; 
+		
+							if (!preg_match('/^[0-9]+$/',$refs["MOVEPOS"])) {
+								//move pos must be numeric
+								$errCode = "PM-7a";
+								$errMsg = "Player Move - game ref, move num and move pos must be numeric"; }
+							else {
+								$tbPMovePos = $refs["MOVEPOS"]; 
+					
+								if (!preg_match('/^[0-9]+$/',$refs["MOVENUM"])) {
+									//move num must be numeric
+									$errCode = "PM-7b";
+									$errMsg = "Player Move - game ref, move num and move pos must be numeric"; }
+								else {
+									$tbPMoveCount = $refs["MOVENUM"]; }
+							}
+						}
+					}
+				}
+					
+				if (strlen($errCode) == 0) {
+					//input has been put into the form. Now run the play function
+					$fnResp = fnValidatePlay($tbP2OldGameRef,$tbPOldPlyrRef,$tbPMovePos,$tbPMoveCount,True); 
+
+					if ($fnResp["errCode"]=="" or $fnResp["errCode"]=="PMO-6" or $fnResp["errCode"]=="PMO-4") {
+						//successful move so return state of play
+						$fnResp = fnStateOfPlay($tbP2OldGameRef);
+						if (is_array($fnResp)) {
+							//all ok so send stats of play data back
+							$errCode = "    ";
+							$errMsg = json_encode($fnResp); }
+						else {
+							//error from state of play
+							$errCode = substr($fnResp,0, 5);
+							$errMsg = substr($fnResp,5, strlen($fnResp)- 5); } }
+					else {
+						//error from fnValidatePlay
+						if ($fnResp["errCode"]=="V") {
+							$errCode = "PM-8";
+							$errMsg = "Player Move - error from validate play"; }
+						else {
+							$errCode = "PM-8,".$fnResp["errCode"];
+							$errMsg = $fnResp["errMsg"]; } }
+				}
+				break;
+					
+			case "PLAYER_INFO":
+			case "PLAYERINFO":
+				//one parameter which is player name 
+				if (count($refs) <> 2) {
+					//error - incorrect number of parameters
+					$errCode = "PI-1";
+					$errMsg = "Player info - incorrect number of parameters"; }
+				elseif (array_key_exists("PLAYERNAME",$refs) == false) {
+					//error - invalid parameter
+					$errCode = "PI-2";
+					$errMsg = "Player info - requires player name parameter"; }
+				
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					//search the players table to retrieve player ref
+					$playerRow = fnQrySelectPlayer(strtoupper(trim($refs["PLAYERNAME"])));
+					if (is_string($playerRow)) {
+						$errCode = "PI-5";
+						$errMsg = "Player info - player name not found"; }
+					else {
+						$playerRef = $playerRow['PlayerRef'];
+						//prepare output
+						$errCode = "    ";
+						$errMsg = "player_info(playerName=".strtoupper(trim($refs["PLAYERNAME"]));
+						//find any games that involve the player
+						$gameRows=fnQrySelectGamesForPlayer($playerRef);
+						if (is_string($gameRows)) {
+							//output already set up and nothing to add except the closing bracket
+							$errMsg .= ")";
+							$errMsg = json_encode(array("type" => "player_info", "PlayerName" => strtoupper(trim($refs["PLAYERNAME"])), "Games" => array())); }
+						else {
+							for ($i=0; $i < count($gameRows); $i++) {
+								if ($gameRows[$i]['Winner']==0){$gameState="in progress";}
+								elseif ($gameRows[$i]['Winner']==$playerRef){$gameState="won";}
+								else {$gameState="lost";} 
+								$errMsg .= ";Game=".$gameRows[$i]['GameRef'].",GameState=".$gameState; 
+								$games[] = array("GameRef" => $gameRows[$i]['GameRef'],  "GameState" => $gameState); }
+							$errMsg .= ")";
+							$errMsg = json_encode(array("type" => "player_info", "PlayerName" => strtoupper(trim($refs["PLAYERNAME"])), "Games"=> $games)) ; }
+					}
+				}
+				break;
+
+			case "OPEN_GAMES":
+			case "OPENGAMES":
+				//No parameters
+				if (count($refs) <> 1) {
+					//error - incorrect number of parameters
+					$errCode = "OG-1";
+					$errMsg = "Open Games - incorrect number of parameters"; }
+
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					//select all games where P2Ref = 0 and join with players table to get player 1 PlayerName
+					$openGamesRows = fnQrySelectOpenGames() ;
+					if (is_string($openGamesRows)) {
+						$errCode = "    ";
+						$errMsg = "Open_Games(none)"; 
+						$errMsg = json_encode(array("type" => "Open_Games","Games" => array()));}
+					else {
+						$errCode = "    ";
+						$errMsg = "Open_Games(";
+						for ($i=0; $i < count($openGamesRows); $i++) {
+							$games[] = array("GameRef" => $openGamesRows[$i]['GameRef'], "Player1Name" => $openGamesRows[$i]['PlayerName']);
+							$errMsg = $errMsg."Game=".$openGamesRows[$i]['GameRef']. "," . $openGamesRows[$i]['PlayerName'] . ";" ; }
+						$errMsg = $errMsg.")"	; 
+						$errMsg = json_encode(array("type" => "Open_Games","Games" => $games)); }
+				}
+				break;					
+
+			case "REGISTER":
+				//two parameters
+				if (count($refs) <> 3) {
+					//error - incorrect number of parameters
+					$errCode = "RP-1";
+					$errMsg = "Register Player - incorrect number of parameters"; }
+				elseif (array_key_exists("PLAYERNAME",$refs) == False) {
+					//error - player name parameter missing
+					$errCode = "RP-2";
+					$errMsg = "Register Player - player name parameter missing";}
+				elseif (array_key_exists("PIN",$refs) == False) {
+					//error - PIN parameter missing
+					$errCode = "RP-3";
+					$errMsg = "Register Player - PIN parameter missing";}
+				else {
+					$password = $refs["PIN"];
+					$playerName = $refs["PLAYERNAME"];
+					
+					//PIN cannot be blank
+					if (strlen($password)<4 or !ctype_digit($password)) {
+						$errCode = "RP-5";
+						$errMsg = "Register Player - PIN must be 4 or more digits";}
+					else {
+						//player name cannot be blank
+						if (strlen($playerName)==0) {
+							$errCode = "RP-6";
+							$errMsg = "Register Player - player name cannot be blank";}
+						//player name comprise letters and numbers only
+						elseif (!preg_match('/^[a-zA-Z0-9 ]+$/',$playerName)) {
+							$errCode = "RP-6";
+							$errMsg = "Register Player - player name - " . $playerName . " - must contain only letters and numbers";}
+						else {
+							//make sure player name doesn't exist already
+							$fnResp = fnQrySelectPlayer($playerName);
+							if ($fnResp != "player not found") {
+								$errCode = "RP-6";
+								$errMsg = "Register Player - player name already exists";}
+						}
+					}
+				}
+					
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					//get a new player ref
+					$refsRow = fnReferencesTable("new player ref");
+					if (is_string($refsRow)) {
+						$errCode = "RP-8";
+						$errMsg= "Error setting up new player ref"; }
+					else {
+						$playerRef = $refsRow['NextPlayerRef']; }
+					//create new player record
+					$fnResp = fnQryAddPlayer($playerRef,$playerName,$password,$hint);
+					if (is_string($fnResp)) {
+						$errCode = "RP-7";
+						$errMsg = "Register Player - error in fnQryAddPlayer [$fnResp]";}
+					else {
+						$errCode = "    ";
+						$errMsg = "register(playername=".$playerName.";PIN=".$password;
+						$errMsg = json_encode(array("type" => "register","playername" => $playerName, "PIN" => $password)); }
+				}
+				break;
+				
+			case "RESIGN":
+				//two parameters
+				if (count($refs) <> 3) {
+					//error - incorrect number of parameters
+					$errCode = "PR-1";
+					$errMsg = "Player Resigns - incorrect number of parameters"; }
+				elseif (array_key_exists("PLAYERNAME",$refs) == False) {
+					//error - player name parameter missing
+					$errCode = "PR-2";
+					$errMsg = "Player Resigns - player name parameter missing";}
+				elseif (array_key_exists("GAMEREF",$refs) == False) {
+					//error - game ref parameter missing
+					$errCode = "PR-3";
+					$errMsg = "Player Resigns - game ref parameter missing";}
+
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					$gameRef = $refs["GAMEREF"];
+					$playerName = $refs["PLAYERNAME"];
+					//check player name/PIN
+					$fnResp = fnValidatePlayerNamePW($playerName); 
+					//if (!ctype_digit($fnResp)) {
+					if (array_key_exists('errCode',$fnResp)) {
+						$errCode = "PR-7";
+						$errMsg = 'Player Resigns - player name and\or PIN is incorrect'; }
+					else {
+						//Update game record
+						$playerRef = $fnResp;
+						$gameRow = fnQrySelectGame($gameRef);
+						if (is_string($gameRow)) {
+							$errCode = "PR-4";
+							$errMsg = "Player Resigns - error retrieving game record";}
+						else {
+							//check player is part of game
+							if ($playerRef != $gameRow['P1Ref'] And $playerRef != $gameRow['P2Ref']) {
+								$errCode = "PR-5";
+								$errMsg = "Player Resigns - player is not part of game";
+								fnLogMessageToDb($errCode.$errMsg."/".$playerRef."/".$gameRow['P1Ref']."/".$gameRow['P2Ref']);}
+							//check game hasn't already finished
+							elseif ($gameRow['Winner'] != 0) {
+								$errCode = "PR-6";
+								$errMsg = "Player Resigns - game is already finished";
+								fnLogMessageToDb($errCode.$errMsg."/".$gameRow['Winner']);}
+							elseif ($gameRow['TurnCount'] >= 10) {
+								//set a winner and save game
+								if ($playerRef == $gameRow['P1Ref']) {
+									$gameRow['Winner'] = $gameRow['P2Ref'] ;}
+								else {
+									$gameRow['Winner'] = $gameRow['P1Ref'] ;}
+								fnQryUpdateGame($gameRow['GameRef'],$gameRow['P1Ref'],$gameRow['P2Ref'],$gameRow['LastPlayer'],$gameRow['StartDate'],$gameRow['LastUpdated'],$gameRow['AreaSize'],$gameRow['Winner'],$gameRow['TurnCount']);
+								$errCode = "    ";
+							}
+							else {
+								//set game to void and save game
+								$gameRow['Winner'] = -1*$playerRef ;
+								fnQryUpdateGame($gameRow['GameRef'],$gameRow['P1Ref'],$gameRow['P2Ref'],$gameRow['LastPlayer'],$gameRow['StartDate'],$gameRow['LastUpdated'],$gameRow['AreaSize'],$gameRow['Winner'],$gameRow['TurnCount']);
+								$errCode = "    ";
+							}
+							//if there are no errors then return the state of play message
+							if ($errCode == "    ") {
+								$fnResp = fnStateOfPlay($gameRef);
+								//if (substr($fnResp,0, 4) == "game") {
+								if (is_array($fnResp)) {
+									//all ok so send stats of play data back
+									$errCode = "    ";
+									$errMsg = json_encode($fnResp); }
+								else {
+									//error from state of play
+									$errCode = substr($fnResp,0, 5);
+									$errMsg = substr($fnResp,5, strlen($fnResp)- 5); } 
+							}
+						}
+					}
+				}
+				break;
+				
+			fnLogMessageToDb("got here");
+			case "GO_BACK":
+			case "GOBACK":
+				//revert to an earlier stage in the game. Only GAMECENTRAL can use this
+				//three parameters - playername, game ref and turncount
+				if (count($refs) <> 4) {
+					//error - incorrect number of parameters
+					$errCode = "GB-1";
+					$errMsg = "Go back - incorrect number of parameters"; }
+				elseif (array_key_exists("PLAYERNAME",$refs) == False) {
+					//error - player name parameter missing
+					$errCode = "GB-2";
+					$errMsg = "Go back - player name parameter missing";}
+				elseif (array_key_exists("GAMEREF",$refs) == False) {
+					//error - game ref parameter missing
+					$errCode = "GB-3";
+					$errMsg = "Go back - game ref parameter missing";}
+				elseif (array_key_exists("TURNCOUNT",$refs) == False) {
+					//error - turn count parameter missing
+					$errCode = "GB-4";
+					$errMsg = "Go back - turn count parameter missing";}
+				else {
+					//get game record
+					$gameRef = $refs["GAMEREF"];
+					$playerName = $refs["PLAYERNAME"];
+					$turnCountVer = $refs["TURNCOUNT"];
+					$gameRow = fnQrySelectGame($gameRef);
+					if (is_string($gameRow)) {
+						$errCode = "GB-6";
+						$errMsg = "Go back - error retrieving game record";}
+					/* elseif ($gameRow['Winner'] != "") {
+						$errCode = "GB-7";
+						$errMsg = "Go back - game already finished";}	*/
+					elseif ($turnCountVer < 1 OR $turnCountVer >= $gameRow['TurnCount']) {
+						$errCode = "GB-7";
+						$errMsg = "Go back - turn count out of range";}
+				}
+				if (strlen($errCode) == 0) {
+					//valid input so carry on
+					//check player name/PIN
+					$fnResp = fnValidatePlayerNamePW($playerName); 
+					if (array_key_exists('errCode',$fnResp) OR $fnResp != 1) {
+						$errCode = "GB-5";
+						$errMsg = "Go back - player name and\or PIN is incorrect"; }
+					else {
+						$errCode = "";
+						$errMsg = "go back - all ok";
+						/*
+						Get game record using game ref and GOBACK turn count
+						Get game record using game ref and turn count = 0
+						Get stacks records using game ref and GOBACK turn count
+						Get stacks records using game ref and turn count = 0
+						Get counters records using game ref and GOBACK turn count
+						Get counters records using game ref and turn count = 0
+						Stop if any of the above fail
+						
+						Overwrite turn count 0 records with data from corresponding record for GOBACK turn count then delete every record with a turn count greater than GOBACK
+							
+						*/
+					}
+				}
+				break;
+	
+				
+			default:
+				//error - invalid input
+				$errCode = "PrI-2";
+				$errMsg = "input type " . $refs["TYPE"] . " not recognised";
+		}
+	}
+
+	fnLogMessageToDb($errCode.$errMsg);
+	if (strlen(trim($errCode))==0){
+		return $errMsg;}
+	else{
+		return json_encode(array("type"=>"error","ErrorCode"=>$errCode,"ErrorMsg"=>$errMsg));}
+} 
+//End fnProcessInput
+function fnFindParams($callString) {
+ 	fnLogMessageToDb("start fnFindParams");
+	
+	//decode the json and create an assoicative array
+	$refs = json_decode($callString, True);
+	if (is_null($refs)) {
+		$refs[0][0] = "FP-1" ; 
+                $jsErrMsg = json_last_error_msg() ;
+		$refs[0][1] = "Find Params - invalid json - ". $jsErrMsg ; 
+		fnLogMessageToDb($refs[0][0].$refs[0][1]);
+		return $refs; }
+	else {
+		return $refs;}
+}
+//End fnFindParams
+function fnProcessNewP1($tbP1NewPlyrName, $silent, $password="", $hint=""){
+ 	fnLogMessageToDb("start fnProcessNewP1");
+	//globals
+	global $tbP1NewGameRef, $tbP1NewPlyrRef;
+	global $tbP2NewGameRef, $tbP2NewPlyrRef; 
+
+	$errMsg = ""; $errCode = "";
+	$gameRef=0;
+	$playerRef=0;
+	$playerRow=null; $refsRow=null;
+	
+	//if player name is not blank then see if it already exists
+	if (strlen($tbP1NewPlyrName) > 0) {
+		$playerRow = fnQrySelectPlayer(strtoupper(trim($tbP1NewPlyrName)));
+		if (is_array($playerRow)) {
+			$playerRef = $playerRow['PlayerRef'];}
+	}
+
+	//get the next game and player refs
+	if ($playerRef > 0) {
+		//already have a player ref so just get new game ref
+		$refsRow = fnReferencesTable("new game ref");
+		if (is_array($refsRow)) {
+			$gameRef = $refsRow['NextGameRef'];	}
+		else {
+			$errMsg = "New player 1 - error setting up new game reference";
+			$errCode = "NP1-1";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+	}
+	else {
+		$refsRow = fnReferencesTable("new both");
+		if  (is_array($refsRow)) {
+			$gameRef = $refsRow['NextGameRef'];
+			$playerRef = $refsRow['NextPlayerRef']; }
+		else {
+			$errMsg = "New player 1 - error setting up new game and player references";
+			$errCode = "NP1-2";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+	}
+
+	//if player name is not blank and its not already on record then associate input name with new player 
+	if (strlen($tbP1NewPlyrName) > 0 and is_array($playerRow)==FALSE) {
+		fnQryAddPlayer($playerRef, strtoupper(trim($tbP1NewPlyrName)),$password,$hint); }
+	
+	//create a new game records
+	$areaSize=7;
+	fnSetUpGameRecs($gameRef, $playerRef, $areaSize);
+	
+	//return the game ref which means all OK
+	return $gameRef;
+}
+//End fnProcessNewP1
+function fnSetUpGameRecs($gameRef, $playerRef, $areaSize) {
+ 	fnLogMessageToDb("start fnSetUpGameRecs");
+	//insert new record into the Games table
+	fnQryAddGame($gameRef, $playerRef, 0, 0, date("Y-m-d H:i:s"),date("Y-m-d H:i:s"), $areaSize, 0, 0, 0);
+	
+	//insert new records into the GameStep table
+    for ($gStep = 0; $gStep <= $areaSize + 1; $gStep++) {
+		if ($gStep == 0) {
+			//set up the player 1 reserve 
+			fnQryAddStack($gameRef, $gStep, $areaSize+2, $playerRef, 0); }
+		else {
+			fnQryAddStack($gameRef, $gStep, 0, 0, 0); }
+		//if gStep = 0 the it is the reserve for player 1 so set up counter (layer) records
+		if ($gStep == 0) {
+			for ($counterHeight = 1; $counterHeight <= $areaSize+2; $counterHeight++) {
+				fnQryAddCounter($gameRef, $gStep, $playerRef, $counterHeight, 0); }
+		}
+	}
+}
+//End fnSetUpGameRecs
+function fnProcessNewP2($tbP2NewGameRef, $tbP2NewPlyrName, $silent, $password = "", $hint = ""){
+ 	fnLogMessageToDb("start fnProcessNewP2");
+	
+	global $tbP1MoveCount, $tbP1MovePos, $tbP2MoveCount, $tbP2MovePos ;
+	
+	$playerRef = 0;
+	$fnResp =0;
+	$errMsg = "";
+	$refsRow = null; $playerRow = null;
+
+	//if player name is not blank then see if it already exists
+	if (strlen($tbP2NewPlyrName) > 0) {
+		// . "new player name: " . $tbP2NewPlyrName .".";
+		$playerRow = fnQrySelectPlayer(strtoupper(trim($tbP2NewPlyrName)));
+		if (is_array($playerRow)) {
+		$playerRef = $playerRow['PlayerRef']; } }
+
+	if ($playerRef == 0) {
+		//get a new player ref
+		$refsRow = fnReferencesTable("new player ref");
+		if  (is_string($refsRow)) {
+			$errCode = "NP2-1";
+			$errMsg = "New player 2 - error setting up new player references";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+		else {
+			$playerRef = $refsRow['NextPlayerRef']; } }
+
+	//if player name is not blank and its not already on record then associate input name with new player 
+	if (strlen($tbP2NewPlyrName) > 0 And is_string($playerRow)) {
+		//adding new player
+		fnQryAddPlayer($playerRef, strtoupper(trim($tbP2NewPlyrName)),$password,$hint); }
+
+	//display player ref
+	$tbP2NewPlyrRef = $playerRef;
+
+	//'set up player 2 reserve in database
+	$fnResp = fnSetUpPlayer2($playerRef, $tbP2NewGameRef, $password, $hint);
+        if ($fnResp == 1) {
+			$errMsg = "New player 2 - invalid game ref";
+			$errCode = "NP2-2";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+		elseif ($fnResp == 2) {
+			$errMsg = "New player 2 - player 2 already exists";
+			$errCode = "NP2-4";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+		elseif ($fnResp > 0) {
+			$errMsg = "New player 2 - unknown error";
+			$errCode = "NP2-5";
+			fnLogMessageToDb($errCode.$errMsg);
+			return array("errCode"=>$errCode, "errMsg"=>$errMsg); }
+
+	//clear any player input 
+	$tbP1MoveCount = ""; $tbP1MovePos = ""; $tbP2MoveCount = ""; $tbP2MovePos = "";
+
+	//return empty errMsg which means all OK
+	return $errMsg;
+}
+//End fnProcessNewP2
+function fnSetUpPlayer2($playerRef, $tbP2NewGameRef, $password, $hint) {
+ 	fnLogMessageToDb("start fnSetUpPlayer2");
+	//global ;
+	
+	$areaSize =0;
+
+	//find game record
+	$gameRow = fnQrySelectGame($tbP2NewGameRef);
+	if (is_string($gameRow)) {
+		return 1; }
+
+	//the player 2 ref should be zero
+	if ($gameRow['P2Ref'] <> 0) {
+		return 2;}
+
+	fnQryUpdateGame ($tbP2NewGameRef,$gameRow['P1Ref'],$playerRef,$playerRef,$gameRow['StartDate'],date("Y-m-d H:i:s"),$gameRow['AreaSize'],$gameRow['Winner'],$gameRow['TurnCount'] );
+	$areaSize = $gameRow['AreaSize'];
+
+	//find the GameStep records for this the player 2 reserve 
+	$stackRows = fnQrySelectStacks($tbP2NewGameRef,0);
+
+	//set height of reserve and save record
+	fnQryUpdateStack($areaSize+1, $areaSize+2, $playerRef,$stackRows[$areaSize+1]['StackRecID']);
+
+	//set up layers records for player 2 reserve
+	for ($counterHeight=1; $counterHeight <= $areaSize + 2; $counterHeight++) {
+		fnQryAddCounter($tbP2NewGameRef, $areaSize+1, $playerRef, $counterHeight, 0); }
+
+	return 0;
+}
+//End fnSetUpPlayer2
+function fnStateOfPlay($gameRef, $turnCount=0) {
+ 	fnLogMessageToDb("start fnStateOfPlay for ".$gameRef);
+	global $tbP1OldGameRef, $tbP1NewGameRef;
+	global $tbP2OldGameRef;
+	$errMsg = "";
+	$sopData = "";
+
+	//get game record
+	$gameRow = fnQrySelectGame($gameRef, $turnCount);
+	if (is_array($gameRow)==FALSE) {
+		$errMsg = "SoP-1Game " . $gameRef . " and turn count " . $turnCount . " not found in fnQrySelectGame";
+		fnLogMessageToDb($errMsg);
+		return $errMsg; }
+
+	//calculate dimensions
+	$sideSpacer = 8;
+	$areaSize = $gameRow['AreaSize'];
+
+	//start building output list
+	$sopData = "gameRef=" . $gameRef . ";player1Name=" . $gameRow['P1Name'] . ";player2Name=" . $gameRow['P2Name'] ;
+	$sopArray = array("type" => "game_status", "GameRef" => $gameRef, "Player1Name" => $gameRow['P1Name'], "Player2Name" => $gameRow['P2Name']) ;
+	$sopData = $sopData . ";turnCount=" . $gameRow['TurnCount'] . ";lastPlayer=" . $gameRow['LPName'];
+	$sopArray += array("TurnCount" => $gameRow['TurnCount']);
+	$sopArray += array("LastPlayer" => $gameRow['LPName']);
+	$sopData = $sopData . ";areaSize=" . $gameRow['AreaSize'] . ";winner=" ;
+	$sopArray += array("AreaSize" => $gameRow['AreaSize']);
+	if ($gameRow['Winner'] == $gameRow['P1Ref']) {
+		$sopData = $sopData . $gameRow['P1Name'];
+		$sopArray += array("Winner" => $gameRow['P1Name']); } 
+	elseif ($gameRow['Winner'] == $gameRow['P2Ref']){ 
+		$sopData = $sopData . $gameRow['P2Name'];
+		$sopArray += array("Winner" => $gameRow['P2Name']);} 
+	elseif ($gameRow['Winner'] < 0){ 
+		$sopData = $sopData . "Void";
+		$sopArray += array("Winner" => "Void");} 
+	else { 
+		$sopArray += array("Winner" => "");} 
+
+	//get player 1 reserve
+	$stackRows = fnQrySelectStacks($gameRef,$turnCount);
+	if (is_array($stackRows)==FALSE) {
+		$errMsg = "SoP-2P1 Stack not found";
+		fnLogMessageToDb($errMsg);
+		return $errMsg; }
+	
+	//process playing area
+	$sopArray["Stacks"] = array();
+	for ($stepNum=1; $stepNum <= $areaSize+2; $stepNum++) {
+		$sopData = $sopData . ";stack=" . $stepNum . "," . $stackRows[$stepNum]['StackHeight'] . ",";
+		$sopArray["Stacks"][$stepNum-1] = array("Stack" => $stepNum-1, "Height" => $stackRows[$stepNum-1]['StackHeight']);
+		if ($stackRows[$stepNum-1]['Top'] == $gameRow['P1Ref'] And $gameRow['P1Ref'] <> 0) {
+			$sopData = $sopData . "P1";
+			$sopArray["Stacks"][$stepNum-1] += array("Top" => "1"); } 
+		elseif ($stackRows[$stepNum-1]['Top'] == $gameRow['P2Ref'] And $gameRow['P2Ref'] <> 0) {
+			$sopData = $sopData . "P2";
+			$sopArray["Stacks"][$stepNum-1] += array("Top" => "2"); } 
+		else {
+			$sopData = $sopData . "0";
+			$sopArray["Stacks"][$stepNum-1] += array("Top" => ""); }
+	}
+	
+	//if there is an error message then return it otherwise return the state of play data 
+	if (strlen($errMsg) > 0) {
+		fnLogMessageToDb($errMsg);
+		return $errMsg;}
+	else {
+		//return "game_status(".$sopData.")";}
+		return $sopArray;}
+}
+//End fnStateOfPlay
+function fnErrorHandler($errorLevel,$errorMessage,$errorFile="",$errorLine="",$errorContext="") {
+ 	//fnLogMessageToDb("start fnErrorHandler");
+	global $callString;
+	$errString = date("Y-m-d H:i:s")." error level=>".$errorLevel."< error message=>".$errorMessage;
+	if (strlen($errorFile) != 0) {
+		$errString = $errString."< error file=>".$errorFile."< ";}
+	if (strlen($errorLine) != 0) {
+		$errString = $errString."< error line=".$errorLine."< "; }
+	$errString = $errString."\n";
+	if (substr($callString,0,4)=="cron") {
+		error_log($errString,3,"./error_log.txt"); }
+	else {
+		error_log($errString,3,"./error_log.txt"); }
+	//print_r($errorContext);
+}
+//End fnErrorHandler
+function fnCommentLog($comment) {
+ 	//fnLogMessageToDb("start fnCommentLog");
+	$commentString = date("Y-m-d H:i:s")." comment=>".$comment."< \n";
+	error_log($commentString,3,".|comment_log.txt"); 
+}
+//End fnCommentLog
+?>

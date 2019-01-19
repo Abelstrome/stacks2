@@ -1,0 +1,15 @@
+<?php 
+
+require 'C:/xampp/htdocs/stacks2/Brian2/Functions21-5.inc';
+fnDbConnect();
+$logLevel=3;
+
+qStore = [];
+//Q Store entries comprise [board, MoveDir, MovePos, qValue]
+qStoreEntry = ['', 0, 0, 0];
+
+//get qvalue from qStore
+
+
+
+?>

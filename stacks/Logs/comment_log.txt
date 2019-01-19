@@ -1,0 +1,16 @@
+2017-10-29 12:24:17 comment=>call string is blank< 
+2017-10-29 12:24:23 comment=>call string is blank< 
+2017-10-29 13:47:58 comment=>call string is blank< 
+2017-10-29 14:02:16 comment=>call string is blank< 
+2017-11-04 02:20:42 error level=>8< error message=>Undefined index: TYPE< error file=>/home/stacksx3/public_html/stacks/Brian/GC1-1.inc< < error line=63< 
+2018-01-21 11:47:16 error level=>8< error message=>Undefined index: TYPE< error file=>/home/stacksx3/public_html/stacks/Brian/GC1-1.inc< < error line=63< 
+2018-01-25 16:56:45 error level=>8< error message=>Undefined index: TYPE< error file=>/home/stacksx3/public_html/stacks/Brian/GC1-1.inc< < error line=63< 
+2018-01-26 16:45:05 error level=>8< error message=>Undefined index: TYPE< error file=>/home/stacksx3/public_html/stacks/Brian/GC1-1.inc< < error line=63< 
+2018-02-17 04:09:59 error level=>8< error message=>Undefined index: TYPE< error file=>/home/stacksx3/public_html/stacks/Brian/GC1-1.inc< < error line=63< 
+2018-09-29 11:41:22 error level=>2< error message=>require(C:/xampp/Alison/blah.ini): failed to open stream: No such file or directory< error file=>C:\xampp\htdocs\stacks\Brian\Functions3.inc< < error line=16< 
+2018-09-29 11:41:54 error level=>2< error message=>require(C:/xampp/Alison2/blah.ini): failed to open stream: No such file or directory< error file=>C:\xampp\htdocs\stacks\Brian\Functions3.inc< < error line=16< 
+2018-09-29 11:43:24 error level=>8< error message=>Undefined variable: _SESSION< error file=>C:\xampp\htdocs\stacks\index.php< < error line=9< 
+2018-09-29 11:43:36 error level=>8< error message=>Undefined variable: _SESSION< error file=>C:\xampp\htdocs\stacks\index.php< < error line=9< 
+2018-09-29 11:44:30 error level=>8< error message=>Undefined variable: _SESSION< error file=>C:\xampp\htdocs\stacks\index.php< < error line=9< 
+2018-09-29 11:44:47 error level=>8< error message=>Undefined variable: _SESSION< error file=>C:\xampp\htdocs\stacks\index.php< < error line=9< 
+2018-09-29 11:46:42 error level=>8< error message=>Undefined index: TYPE< error file=>C:\xampp\htdocs\stacks\Brian\GC1-1.inc< < error line=63< 
