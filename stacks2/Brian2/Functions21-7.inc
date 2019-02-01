@@ -113,6 +113,7 @@ Contains code for Monte Carlo Tree Search
 Contains code (fnSimulateMove) to simulate a game without affecting the real game stored in the database 
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
 Contains code (fnRollout) for playing a game to the end without updaing the database.
+Contains code (fnSetUpGSActions) for setting up new GSA records
 */
 
 //Global variables for database queries
@@ -721,7 +722,9 @@ function RunGCP3 ($playerName, $gameRef){
 }
 // End of fnRunGCP3
 function $fnSetUpGSActions($board){
-
+	/*
+	Use this function when unable to find a GSA records for a given board (game state)
+	*/
 }
 // End of fnSetUpGSActions
 function fnRunGCP2($playerName, $gameRef) {
