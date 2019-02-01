@@ -112,6 +112,7 @@ Contains code to allow P1 to use q-learning to move. See fnRunGCP2
 Contains code for Monte Carlo Tree Search 
 Contains code (fnSimulateMove) to simulate a game without affecting the real game stored in the database 
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
+Contains code (fnRollout) for playying a game to the end without updaing the database.
 */
 
 //Global variables for database queries
@@ -195,6 +196,7 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 	}
 	echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
 }
+//End fnRollout
 function fnInitialiseRows($gameState, &$xGameRow, &$xStackRows){
 	fnLogMessageToDb('start fnInitialiseRows');
 	$errCode = '';
@@ -508,6 +510,220 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 	return array($errCode,$errMsg);
 }
 // End of fnSimulateMove
+function RunGCP3 ($playerName, $gameRef){
+	global $logLevel;
+	$errCode = '';
+	$errMsg = '';
+	fnLogMessageToDb('(' . $logLevel . ') start fnRunGCP2 for player '. $playerName . ' and game ' . $gameRef);
+
+	/*
+	Create a new game with the given player as P1 and GAMECENTRAL as P2
+	Run game for a number of turns
+	P1 will use monte carlo tree search
+	GAMECENTRAL will make random moves
+	*/
+	
+	//get player ref for given player name
+	$fnResp = fnQrySelectPlayer(trim($playerName));
+	if (is_array($fnResp)) {
+		$p1PlayerRef = $fnResp['PlayerRef'];}
+	else {
+		$errCode = 'GC3-1';
+		$errMsg = $fnResp; }
+	
+	//create new game with GAMECENTRAL as the P2
+	if ($errCode == '') {
+		if ($gameRef == 0) {
+			$fnResp = fnProcessNewP1($playerName, True); 
+			if (array_key_exists('errCode',$fnResp) == False) {
+				//Response from fnProcessNewP1 is ok - a numeric fnResp means the new game ref has been returned instead of string error message
+				$gameRef = $fnResp['gameRef'];
+				echo 'new game ref = ' . $gameRef;
+				//echo $errMsg;
+			}
+			else {
+				//error occurred in fnProcessNewP1
+				$errCode = 'GC3-2';
+				$errMsg = $fnResp['errCode'] . $fnResp['errMsg']; 
+			}
+
+			if ($errCode == '') {
+				$fnResp = fnProcessNewP2($gameRef, "GAMECENTRAL", True);
+				if (strlen($fnResp) > 0) {
+					//errors occurred
+					$errCode = 'GC3-3';
+					$errMsg = $fnResp; 
+				}
+			}
+		}
+	}
+	
+	//get game and stacks records	
+	if ($errCode == '') {
+		//progress update
+		fnLogMessageToDb('new game ref ' . $gameRef . ' P1 is ' . $playerName . ' P2 is GAMECENTRAL'); 
+		//get game and stacks records
+		$gameRow = fnQrySelectGame($gameRef);
+		if (is_string($gameRow)) {
+			$errMsg = $gameRow;
+			$errCode = 'GC3-4';
+			fnLogMessageToDb($errCode.$errMsg);
+		}
+		else {
+			//get stacks
+			$stackRows = fnQrySelectStacks($gameRef);
+			if (is_string($stackRows)) {
+				$errMsg = $stackRows ;
+				$errCode = 'GC3-5';
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+		}
+	}
+	echo 'game ref: ' . $gameRow['GameRef'] . '<BR>';
+
+	while ($errCode == '' and $turnCount < 10000) { 
+		$turnCount++;
+		//stop if the game is already won
+		if ($gameRow['Winner'] > 0) break;
+		
+		//is it P1 or P2's turn
+		if ($gameRow['P1RecID'] == $gameRow['LastPlayerID']) {
+			//P2's turn
+			$player1or2 = 2; }
+		else {
+			//P1's turn
+			$player1or2 = 1; }
+			
+		$moved = False;
+				
+		//check for a priority move for P2 (GAMECENTRAL) only
+		if ($player1or2 == 2) {
+			fnLogMessageToDb('calling fnPriorityMove for P' . $player1or2 . ' and GR=' . $gameRow['GameRef'] . ' with TC=' . $gameRow['TurnCount']);
+			$fnResp = fnPriorityMove($gameRow, $stackRows, $player1or2);
+			if ($fnResp[0] > 0) {
+				//priority move found so call fnProcessMove($gameRecID, &$gameRow, &$stackRows, $moveDir, $movePos, $silent=0)
+				$fnResp2 = fnProcessMove($gameRow['GameRecID'], $gameRow, $stackRows, $fnResp[1], $fnResp[0]);
+				if ($fnResp2['errCode'] != '' and $fnResp2['errCode'] != 'PMO-4' and $fnResp2['errCode'] != 'PMO-6') {
+					$errCode = 'GC3-6';
+					$errMsg = $fnResp2['errCode'].$fnResp2['errMsg'] ;
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+				$moved = True; 
+			}
+		}
+		
+		//take random move for P2 (GAMECENTRAL)
+		if ($errCode == '' and $moved == False and $player1or2 == 2) {
+			$randMoveDir = 0;
+			$randMovePos = 0;			
+			fnLogMessageToDb('going to take random move for P' . $player1or2 . ' and GR=' . $gameRow['GameRef'] . ' with TC=' . $gameRow['TurnCount']);
+			//get all possible moves (fnGetMoves returns a list of moves in the form (GameRecID, MoveDir, MovePos) )
+			$movesList = fnGetMoves($gameRow['GameRecID'], $gameRow, $stackRows);
+			$movesListUS = $movesList;
+			if (is_string($movesList)) {
+				$errCode = 'GC3-7';
+				$errMsg = $movesList;
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+			else {
+				fnLogMessageToDb('got move list for random move . LastPlayer=' . $gameRow['LastPlayerID'] . '< player1or2=' . $player1or2 . '< GC Player=' . $playerRef);
+				//store board before move
+				//$board = fnEncodeBoard($stackRows, $gameRow);
+				//shuffle the table and take the first entry
+				if (shuffle($movesList)) {
+					//table shuffled so call fnProcessMove with first entry
+					$randMovePos = $movesList[0][2];
+					$randMoveDir = $movesList[0][1];
+					$fnResp = fnProcessMove($gameRow['GameRecID'], $gameRow, $stackRows, $randMoveDir, $randMovePos);
+					//PMO-3 = P2 has won; PMO-4 = P1 misses a turn; PMO-5 = P1 has won; PMO-6 = P2 misses a turn
+					if ($fnResp['errCode'] != '' and $fnResp['errCode'] != 'PMO-4' and $fnResp['errCode'] != 'PMO-6') {
+						$errCode =  'GC3-8';
+						$errMsg = $fnResp['errCode'].$fnResp['errMsg'] ;
+						fnLogMessageToDb($errCode.$errMsg);
+					}
+					$moved = True;
+				}
+				else {
+					//error has occurred in shuffle routine
+					$errCode = 'GC3-9';
+					$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+			}
+		}
+		
+		//Do this for P1 only
+		if ($errCode == '' and $moved == False and $player1or2 == 1) {
+			$board = fnEncodeBoard($stackRows, $gameRow);
+			//search to find GSAction records for current board
+			$fnResp = fnQrySelectGSActionMoves($board);
+			if (is_string($fnResp)) {
+				//error has occurred
+				$errCode = 'GC3-10';
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+			if ($errCode == '') {
+				$GSActionsCount = count($FnResp); 
+
+				switch ($GSActionsCount) {
+					case 0: //zero records so set up new ones
+						$GSActionRows = $fnSetUpGSActions($board);
+						break;
+						
+					case 1: //one record so go to Expansion
+						
+						break:
+						
+					default: //more than one record so go to Selection
+						$GSActionRows = $fnResp;
+						break:
+				}
+			}
+			
+			//only continue if there are no errors
+			if ($errCode == '') {
+				if ($GSActionsCount == 1) {
+					//save rec ID
+					$GSActionOriginalRecID = $GSA
+					}
+					//only parent found so create new action records for each possible move
+					else {
+						$movesList = fnGetMoves($gameRow['GameRecID'], $gameRow, $stackRows);
+						if (is_string($movesList)) {
+							$errCode = 'GC3-13';
+							$errMsg = $movesList;
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+						else {
+							//start database transaction
+							$conn->beginTransaction();
+							foreach ($movesList as $aMove){
+								//create an GSAction record
+								$fnResp = fnQryAddGSAction($board, 0 , "", $aMove[1], $aMove[2]);
+								if (strlen($fnResp) > 0) {
+									//error has occurred
+									$errCode = 'GC3-14';
+									$errMsg = $fnResp;
+									fnLogMessageToDb($errCode.$errMsg);
+									break;
+								}
+							}
+							//end database transaction
+							if (strlen($errCode) > 0) $conn->rollback(); 
+							else $conn->commit(); 							
+						}
+					}
+				}
+			}
+		}
+	}
+}
+// End of fnRunGCP3
+function $fnSetUpGSActions($board){
+
+}
+// End of fnSetUpGSActions
 function fnRunGCP2($playerName, $gameRef) {
 	global $logLevel;
 	$errCode = '';
@@ -2201,15 +2417,19 @@ function fnGetMoves($gameKey, $gameRow, $stackRows, $quick=False) {
 					if ($stackRows[$stackRowsIndex]['OwnerPNum'] == 2) {
 						//check if there is move going left, forward or right
 						for ($moveDir = 1; $moveDir < 4; $moveDir++) {
-							$fnResp = fnFindNextStack($gameRow, $stackRows, $stackRowsIndex, $moveDir, 2);
-							//echo "fnFindNextStack resp ".$fnResp[0]."<BR>";
-							if ($fnResp[0] == -2){
-								//error in function
-								$errCode = "GM-9";
-								$errMsg = $fnResp[1].$fnResp[2]; }
-							elseif (intval($fnResp[0]) > -1) {
-								array_push($movesList, array($gameKey, $moveDir, $stackRows[$stackRowsIndex]['StackNum'])); 
-								if ($logLevel>4) {fnLogMessageToDb("P2 possible move: MD={$moveDir} MP={$stackRows[$stackRowsIndex]['StackNum']}"); }	
+							if (($trackNum == 0 and $moveDir > 1) or
+									($trackNum > 0 and $trackNum < $gameRow['AreaWidth'] - 1) or
+									($trackNum == $gameRow['AreaWidth'] - 1 and $moveDir < 3)) {
+								$fnResp = fnFindNextStack($gameRow, $stackRows, $stackRowsIndex, $moveDir, 2);
+								//echo "fnFindNextStack resp ".$fnResp[0]."<BR>";
+								if ($fnResp[0] == -2){
+									//error in function
+									$errCode = "GM-9";
+									$errMsg = $fnResp[1].$fnResp[2]; }
+								elseif (intval($fnResp[0]) > -1) {
+									array_push($movesList, array($gameKey, $moveDir, $stackRows[$stackRowsIndex]['StackNum'])); 
+									if ($logLevel>4) {fnLogMessageToDb("P2 possible move: MD={$moveDir} MP={$stackRows[$stackRowsIndex]['StackNum']}"); }	
+								}
 							}
 						}
 					}
@@ -2229,15 +2449,19 @@ function fnGetMoves($gameKey, $gameRow, $stackRows, $quick=False) {
 					if ($stackRows[$stackRowsIndex]['OwnerPNum'] == 1) {
 						//check if there is move going left, forward or right
 						for ($moveDir = 1; $moveDir < 4; $moveDir++) {
-							$fnResp = fnFindNextStack($gameRow, $stackRows, $stackRowsIndex, $moveDir, 1);
-							//echo "fnFindNextStack resp ".$fnResp[0]."<BR>";
-							if ($fnResp[0] == -2){
-								//error in function
-								$errCode = "GM-A";
-								$errMsg = $fnResp[1].$fnResp[2]; }
-							elseif (intval($fnResp[0]) > -1) {
-								array_push($movesList, array($gameKey, $moveDir, $stackRows[$stackRowsIndex]['StackNum'])); 
-								if ($logLevel>4) {fnLogMessageToDb("P2 possible move: MD={$moveDir} MP={$stackRows[$stackRowsIndex]['StackNum']}"); }
+							if (($trackNum == 0 and $moveDir < 3) or
+									($trackNum > 0 and $trackNum < $gameRow['AreaWidth'] - 1) or
+									($trackNum == $gameRow['AreaWidth'] - 1 and $moveDir > 1)) {
+								$fnResp = fnFindNextStack($gameRow, $stackRows, $stackRowsIndex, $moveDir, 1);
+								//echo "fnFindNextStack resp ".$fnResp[0]."<BR>";
+								if ($fnResp[0] == -2){
+									//error in function
+									$errCode = "GM-A";
+									$errMsg = $fnResp[1].$fnResp[2]; }
+								elseif (intval($fnResp[0]) > -1) {
+									array_push($movesList, array($gameKey, $moveDir, $stackRows[$stackRowsIndex]['StackNum'])); 
+									if ($logLevel>4) {fnLogMessageToDb("P2 possible move: MD={$moveDir} MP={$stackRows[$stackRowsIndex]['StackNum']}"); }
+								}
 							}
 						}
 					}

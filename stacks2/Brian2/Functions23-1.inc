@@ -204,12 +204,12 @@ function fnDbConnect() {
 		$query = 'INSERT INTO v2_gcplayer_data SET GCPlayerRef = :playerRef, Board = :board, MovePos = :movePos, MoveDir = :moveDir, Source = :source';
 		$qryAddGCPlayerData = $conn->prepare($query);
 		
-		//Update GC (GameCerntral) player data
+		//Update GC (GameCentral) player data
 		$query = 'UPDATE v2_gcplayer_data SET Source = :source, UsedTimes = :usedTimes WHERE GCPlayerRef = :playerRef AND Board = :board';
 		$qryUpdateGCPlayerData = $conn->prepare($query);
 		
 		//Add GSA
-		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState';
+		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, MoveDir = :moveDir, MovePos = :movePos';
 		$qryAddGSAction = $conn->prepare($query);
 		
 		//Update GSA
@@ -330,16 +330,17 @@ function fnQrySelectGCPlayerData2($playerRef) {
 	}
 }
 //End fnQrySelectGCPlayerData2
-function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState) {
+function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0) {
 	fnLogMessageToDb('start fnQryAddGSAction');
 	global $qryAddGSAction;
 	$errMsg = '';
 
 	try {
-		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState));
+		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState, 
+								':moveDir' => $moveDir,':movePos' => $movePos));
 	}
 	catch(PDOException $e) {
-		$errMsg = "qryAddGSAction failed (for GameState " . $gameState . ' and FromGSRecID ' . $fromGSRecID . '): ' . $e->getMessage();
+		$errMsg = "qryAddGSAction failed (for GameState " . $gameState . ' and fromGSRecID ' . $fromGSRecID . '): ' . $e->getMessage();
 		fnLogMessageToDb($errMsg);
 	}
 	
@@ -447,7 +448,7 @@ function fnQrySelectGSActionMoves($gameState, $root = 'N') {
 			return $gsActionRows; }
 		else {
 			fnLogMessageToDb('fnQrySelectGSActionMoves - GSA for ' . $gameState . ' not found');
-			return 'GSA for ' . $gameState . ' not found'; }
+			return []; }
 	}
 	catch(PDOException $e) {
 		if ($root = 'N') $errMsg = 'qrySelectGSActionMoves failed: ' . $e->getMessage();
