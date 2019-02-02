@@ -113,7 +113,7 @@ Contains code for Monte Carlo Tree Search
 Contains code (fnSimulateMove) to simulate a game without affecting the real game stored in the database
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
 Contains code (fnRollout) for playing a game to the end without updaing the database.
-Contains code (fnSetUpGSActions) for setting up new GSA records. See MTSC 3-2 design. Desktop change. Tablet chamnge.
+Contains code (fnSetUpGSActions) for setting up new GSA records. See MTSC 3-2 design. Desktop change. Tablet change2 v2.
 */
 
 //Global variables for database queries
