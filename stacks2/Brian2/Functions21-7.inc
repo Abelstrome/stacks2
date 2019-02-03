@@ -668,7 +668,18 @@ function RunGCP3 ($playerName, $gameRef){
 				$GSActionsCount = count($FnResp);
 
 				switch ($GSActionsCount) {
-					case 0: //zero records so set up new ones
+					case 0: /*zero records so
+                            			i. Save record ID as $originalGSActionRecID 
+                                                ii. Make record ID the current GSA rec
+                                                iii. Call Expansion($gsActionRows, $currentGSARecID)
+                                                iv. If returned record ID > 0 then make it the current GSA rec
+                                                     1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
+                                                        a) Call Rollout (NextGameState, [], [])
+                                                     2) Call Back Propagation to update parent records with the score from Rollout
+                                                        a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
+                                                v. If returned record ID = 0 go to b. and call Selection
+
+                                                        */
 						$GSActionRows = $fnSetUpGSActions($board);
 						break;
 
