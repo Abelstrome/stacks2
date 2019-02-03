@@ -567,7 +567,7 @@ function RunGCP3 ($playerName, $gameRef){
 		$gameRow = fnQrySelectGame($gameRef);
 		if (is_string($gameRow)) {
 			$errMsg = $gameRow;
-			$errCode = 'GC3-4';
+			$errCode = 'GC3-4'; just
 			fnLogMessageToDb($errCode.$errMsg);
 		}
 		else {
@@ -665,9 +665,9 @@ function RunGCP3 ($playerName, $gameRef){
 				fnLogMessageToDb($errCode.$errMsg);
 			}
 			if ($errCode == '') {
-				$GSActionsCount = count($FnResp);
-
-				switch ($GSActionsCount) {
+				$gsActionsCount = count($fnResp);
+                                $gsActionRows = $fnResp;
+				switch ($gsActionsCount) {
 					case 0: /*zero records so
                             			i. Save record ID as $originalGSActionRecID 
                                                 ii. Make record ID the current GSA rec
@@ -677,11 +677,11 @@ function RunGCP3 ($playerName, $gameRef){
                                                         a) Call Rollout (NextGameState, [], [])
                                                      2) Call Back Propagation to update parent records with the score from Rollout
                                                         a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
-                                                v. If returned record ID = 0 go to b. and call Selection
-
-                                                        */
-						$GSActionRows = $fnSetUpGSActions($board);
-						break;
+                                                v. If returned record ID = 0 go to b. and call Selection */
+						$originalGSActionRecID = $gsActionRows[0][GSARecID];
+						$currentGSActionRecID = $gsActionRows[0][GSARecID];
+                                                $gsRecID = fnExpansion($gsActionRows, $currentGSActionRecID);
+                                                break;
 
 					case 1: //one record so go to Expansion
 
