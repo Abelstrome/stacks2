@@ -114,6 +114,7 @@ Contains code (fnSimulateMove) to simulate a game without affecting the real gam
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
 Contains code (fnRollout) for playing a game to the end without updaing the database.
 Contains code (fnSetUpGSActions) for setting up new GSA records. See MTSC 3-2 design. Desktop change. Tablet change2 v2.
+Codenvy updates
 */
 
 //Global variables for database queries
@@ -668,16 +669,18 @@ function RunGCP3 ($playerName, $gameRef){
 				$gsActionsCount = count($fnResp);
                                 $gsActionRows = $fnResp;
 				switch ($gsActionsCount) {
-					case 0: /*zero records so
-                            			i. Save record ID as $originalGSActionRecID 
-                                                ii. Make record ID the current GSA rec
-                                                iii. Call Expansion($gsActionRows, $currentGSARecID)
-                                                iv. If returned record ID > 0 then make it the current GSA rec
-                                                     1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
-                                                        a) Call Rollout (NextGameState, [], [])
-                                                     2) Call Back Propagation to update parent records with the score from Rollout
-                                                        a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
-                                                v. If returned record ID = 0 go to b. and call Selection */
+					case 0: 
+                        /*zero records so
+                        i. Save record ID as $originalGSActionRecID 
+                        ii. Make record ID the current GSA rec
+                        iii. Call Expansion($gsActionRows, $currentGSARecID)
+                        iv. If returned record ID > 0 then make it the current GSA rec
+                            1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
+                                a) Call Rollout (NextGameState, [], [])
+                            2) Call Back Propagation to update parent records with the score from Rollout
+                                a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
+                        v. If returned record ID = 0 go to b. and call Selection 
+                        */
 						$originalGSActionRecID = $gsActionRows[0][GSARecID];
 						$currentGSActionRecID = $gsActionRows[0][GSARecID];
                                                 $gsRecID = fnExpansion($gsActionRows, $currentGSActionRecID);
