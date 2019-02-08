@@ -568,7 +568,7 @@ function RunGCP3 ($playerName, $gameRef){
 		$gameRow = fnQrySelectGame($gameRef);
 		if (is_string($gameRow)) {
 			$errMsg = $gameRow;
-			$errCode = 'GC3-4'; just
+			$errCode = 'GC3-4';
 			fnLogMessageToDb($errCode.$errMsg);
 		}
 		else {
@@ -683,8 +683,30 @@ function RunGCP3 ($playerName, $gameRef){
                         */
 						$originalGSActionRecID = $gsActionRows[0][GSARecID];
 						$currentGSActionRecID = $gsActionRows[0][GSARecID];
-                                                $gsRecID = fnExpansion($gsActionRows, $currentGSActionRecID);
-                                                break;
+						
+						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
+						if (is_Sring($fnResp)) {
+							//error has occurred
+							$errCode= 'GC3-11';
+							$errMsg = $fnResp;
+							fnLogMessageToDb($errCode.$errMsg);
+						}	
+						else if ($fnResp > 0) {
+							//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
+							$currentGSActionRecID = $gsActionRows[$gsRecIndex];
+							$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
+							if ($fnResp >= 0) {
+								//add code here
+							}
+							else {
+								$errMsg = '';
+								$errCode = '';
+							}
+						}
+						else if ($gsRdcID = 0) {
+							//add code here
+						}
+						break;
 
 					case 1: //one record so go to Expansion
 
