@@ -1,5 +1,5 @@
 <?php
-	
+
 /* Stacks version 1-2.
 Players can now move more than one counter at a time in the playing area.
 In version 1-1 a player can only ever move 1 counter at a time so long the current stack was of equal or greater height as the next. Now up to n counters can be moved together so long as the current stack is n-1 counters taller than the next. (When the current and next stacks are of equal height then only 1 counter can be moved.) The ownership of the counters that are moved doesn't change so a player can move his opponent's counters.
@@ -669,9 +669,9 @@ function RunGCP3 ($playerName, $gameRef){
 				$gsActionsCount = count($fnResp);
                                 $gsActionRows = $fnResp;
 				switch ($gsActionsCount) {
-					case 0: 
+					case 0:
                         /*zero records so
-                        i. Save record ID as $originalGSActionRecID 
+                        i. Save record ID as $originalGSActionRecID
                         ii. Make record ID the current GSA rec
                         iii. Call Expansion($gsActionRows, $currentGSARecID)
                         iv. If returned record ID > 0 then make it the current GSA rec
@@ -679,21 +679,21 @@ function RunGCP3 ($playerName, $gameRef){
                                 a) Call Rollout (NextGameState, [], [])
                             2) Call Back Propagation to update parent records with the score from Rollout
                                 a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
-                        v. If returned record ID = 0 go to b. and call Selection 
+                        v. If returned record ID = 0 go to b. and call Selection
                         */
 						$originalGSActionRecID = $gsActionRows[0][GSARecID];
 						$currentGSActionRecID = $gsActionRows[0][GSARecID];
-						
+
 						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
 						if (is_Sring($fnResp)) {
 							//error has occurred
 							$errCode= 'GC3-11';
 							$errMsg = $fnResp;
 							fnLogMessageToDb($errCode.$errMsg);
-						}	
+						}
 						else {
 							$gsActionRowsIndex = $fnResp;
-							if ($gsaIndex > 0) 
+							if ($gsaIndex > 0)
 								//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
 								$currentGSActionRecID = $gsActionRows[$gsRecIndex];
 								$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
@@ -703,8 +703,8 @@ function RunGCP3 ($playerName, $gameRef){
 								}
 								else {
 									$score = $fnResp;
-									//add code here to call fnBackPropagation
-									$fnResp = fnBackPropagation()	;
+									//add code here to call fnBackPropagation function
+									$fnResp = fnBackPropagation();
 								}
 							else {
 								//response from fnExpansion ($gsActionRowsIndex) is zero
