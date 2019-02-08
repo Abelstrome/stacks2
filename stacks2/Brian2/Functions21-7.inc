@@ -691,20 +691,23 @@ function RunGCP3 ($playerName, $gameRef){
 							$errMsg = $fnResp;
 							fnLogMessageToDb($errCode.$errMsg);
 						}	
-						else if ($fnResp > 0) {
-							//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
-							$currentGSActionRecID = $gsActionRows[$gsRecIndex];
-							$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
-							if ($fnResp >= 0) {
-								//add code here
-							}
+						else {
+							$gsaIndex = £fnResp;
+							if ($gsaIndex > 0) 
+								//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
+								$currentGSActionRecID = $gsActionRows[$gsRecIndex];
+								$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
+								if (is_Sring($fnResp)) {
+									$errMsg = 'GC3-12';
+									$errCode = $fnResp;
+								}
+								else {
+									$score = $fnResp;
+									//add code here to call fnBackPropagation
+								}
 							else {
-								$errMsg = '';
-								$errCode = '';
+								//response from fnExpansion ($gsaIndex) is zero
 							}
-						}
-						else if ($gsRdcID = 0) {
-							//add code here
 						}
 						break;
 
