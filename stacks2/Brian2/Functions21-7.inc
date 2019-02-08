@@ -1,5 +1,5 @@
 <?php
-
+	
 /* Stacks version 1-2.
 Players can now move more than one counter at a time in the playing area.
 In version 1-1 a player can only ever move 1 counter at a time so long the current stack was of equal or greater height as the next. Now up to n counters can be moved together so long as the current stack is n-1 counters taller than the next. (When the current and next stacks are of equal height then only 1 counter can be moved.) The ownership of the counters that are moved doesn't change so a player can move his opponent's counters.
@@ -692,7 +692,7 @@ function RunGCP3 ($playerName, $gameRef){
 							fnLogMessageToDb($errCode.$errMsg);
 						}	
 						else {
-							$gsaIndex = £fnResp;
+							$gsActionRowsIndex = $fnResp;
 							if ($gsaIndex > 0) 
 								//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
 								$currentGSActionRecID = $gsActionRows[$gsRecIndex];
@@ -704,9 +704,10 @@ function RunGCP3 ($playerName, $gameRef){
 								else {
 									$score = $fnResp;
 									//add code here to call fnBackPropagation
+									$fnResp = fnBackPropagation()	;
 								}
 							else {
-								//response from fnExpansion ($gsaIndex) is zero
+								//response from fnExpansion ($gsActionRowsIndex) is zero
 							}
 						}
 						break;
