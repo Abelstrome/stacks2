@@ -139,7 +139,7 @@ require	"Functions23-1.inc";
 
 function fnRollout($gameState, $xGameRow, $xStackRows){
 	$errCode = '';
-	fnLogMessageToDb('start fnSimulateGame');
+	fnLogMessageToDb('start fnRollout');
 
 	//if xGameRow is empty then create new data for xGameRow and xStackRows
 	if (count($xGameRow) == 0) fnInitialiseRows($gameState, $xGameRow, $xStackRows);
@@ -160,6 +160,8 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 			$errCode = "ROL-1";
 			$errMsg = $fnResp;
 			fnLogMessageToDb($errCode.$errMsg);
+			$fnResp2[0] = $errCode;
+			$fnResp2[1] = $errMsg;
 		}
 		else {
 			$movesList = $fnResp;
@@ -172,6 +174,8 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 					$errCode = 'ROL-2';
 					$errMsg = 'Player has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
 					fnLogMessageToDb($errCode.$errMsg);
+					$fnResp2[0] = $errCode;
+					$fnResp2[1] = $errMsg;
 				}
 				else {
 					//choose the next move at random
@@ -179,21 +183,20 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 						$errCode = 'ROL-3';
 						$errMsg = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
 						fnLogMessageToDb($errCode.$errMsg);
-						//echo $errMsg . '<br>' ;
+						$fnResp2 = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2], []);
 					}
 					else{
 						//error has occurred in shuffle routine
 						$errCode = 'ROL-4';
 						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
 						fnLogMessageToDb($errCode.$errMsg);
+						$fnResp2[0] = $errCode;
+						$fnResp2[1] = $errMsg;
 					}
 				}
 			}
 		}
 
-		$fnResp2 = fnSimulateMove($gameState, $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2], []);
-
-		//echo 'fnSimulateGame returned ' . $fnResp2 . count($fnResp2) . '<br>';
 		$loopCount++;
 	}
 	echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
@@ -665,9 +668,9 @@ function RunGCP3 ($playerName, $gameRef){
 				$errMsg = $fnResp;
 				fnLogMessageToDb($errCode.$errMsg);
 			}
-			if ($errCode == '') {
+			else {
 				$gsActionsCount = count($fnResp);
-                                $gsActionRows = $fnResp;
+				$gsActionRows = $fnResp;
 				switch ($gsActionsCount) {
 					case 0:
                         /*zero records so
@@ -685,6 +688,7 @@ function RunGCP3 ($playerName, $gameRef){
 						$currentGSActionRecID = $gsActionRows[0][GSARecID];
 
 						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
+						//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
 						if (is_Sring($fnResp)) {
 							//error has occurred
 							$errCode= 'GC3-11';
@@ -693,9 +697,8 @@ function RunGCP3 ($playerName, $gameRef){
 						}
 						else {
 							$gsActionRowsIndex = $fnResp;
-							if ($gsaIndex > 0)
-								//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
-								$currentGSActionRecID = $gsActionRows[$gsRecIndex];
+							if ($gsaIndex > 0) {
+								$currentGSActionRecID = $gsActionRows[$gsActionRowsIndex][GSARecID];
 								$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
 								if (is_Sring($fnResp)) {
 									$errMsg = 'GC3-12';
@@ -706,8 +709,9 @@ function RunGCP3 ($playerName, $gameRef){
 									//add code here to call fnBackPropagation function
 									$fnResp = fnBackPropagation();
 								}
+							}
 							else {
-								//response from fnExpansion ($gsActionRowsIndex) is zero
+								//response from fnExpansion($gsActionRowsIndex) is zero
 							}
 						}
 						break;
