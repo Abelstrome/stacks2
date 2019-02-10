@@ -147,12 +147,12 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 	//echo 'startup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
 
 	$minMoves = 2 ;
-	$fnResp2 = ['', ''];
+	$errCode = '';
 	$loopCount=0;
 
 	set_time_limit(7000);
-	echo 'start time ' . date("Y-m-d H:i:s") . '<br>';
-	while ($fnResp2[0] == '' and $loopCount < 1300){
+	//echo 'start time ' . date("Y-m-d H:i:s") . '<br>';
+	while ($errCode == '' and $loopCount < 1300){
 
 		//find next move for next player
 		$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
@@ -160,38 +160,62 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 			$errCode = "ROL-1";
 			$errMsg = $fnResp;
 			fnLogMessageToDb($errCode.$errMsg);
-			$fnResp2[0] = $errCode;
-			$fnResp2[1] = $errMsg;
 		}
 		else {
 			$movesList = $fnResp;
 			$moveCount = count($movesList);
-			fnLogMessageToDb('number of moves for P2=' . $moveCount . '<');
 			if ($moveCount > 0) {
 				//Player has moves available
 				//When simulating games for Monte Carlo Tree Search when a player has very few moves available the game may be counted as lost
 				if ($moveCount <= $minMoves) {
-					$errCode = 'ROL-2';
-					$errMsg = 'Player has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
+					if ($gameRow['P1RecID'] == $gameRow['LastPlayerID']) {
+						$player1or2 = 2;
+						$errCode = 'ROL-2';}
+					else {
+						$player1or2 = 1;
+						$errCode = 'ROL-3';}
+					$errMsg = 'P' . $player1or2 . ' has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
 					fnLogMessageToDb($errCode.$errMsg);
-					$fnResp2[0] = $errCode;
-					$fnResp2[1] = $errMsg;
 				}
 				else {
 					//choose the next move at random
 					if (shuffle($movesList)) {
-						$errCode = 'ROL-3';
-						$errMsg = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
-						fnLogMessageToDb($errCode.$errMsg);
-						$fnResp2 = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2], []);
+						$errCode2 = 'ROL-9';
+						$errMsg2 = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
+						fnLogMessageToDb($errCode2.$errMsg2);
+						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2], []);
+						// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+						// Error codes: SMO-3, SMO-7
+						if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+							//fnSimulateMove returned an error code 
+							$errCode = 'ROL-5';
+							$errMsg = $fnResp;
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+						elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+							// P2 has won
+							$errCode = 'ROL-6';
+							$errMsg = 'P2 has won';
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+						elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+							// P1 has won
+							$errCode = 'ROL-7';
+							$errMsg = 'P1 has won';
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+						else {
+							//unknown response code
+							$errCode = 'ROL-8';
+							$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+							fnLogMessageToDb($errCode.$errMsg);
+						}
 					}
 					else{
 						//error has occurred in shuffle routine
 						$errCode = 'ROL-4';
 						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
 						fnLogMessageToDb($errCode.$errMsg);
-						$fnResp2[0] = $errCode;
-						$fnResp2[1] = $errMsg;
 					}
 				}
 			}
@@ -199,7 +223,14 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 
 		$loopCount++;
 	}
-	echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
+	//echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
+	
+	if ($errCode = '') {
+		//game has reached max number of moves so effectively a draw
+		$errCode = 'ROL-10';
+		$errMsg = 'Game drawn';
+	}
+	return array("errCode" => $errCode, "errMsg" => $errMsg) ; 
 }
 //End fnRollout
 function fnInitialiseRows($gameState, &$xGameRow, &$xStackRows){
@@ -280,6 +311,9 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 
 	//echo 'startup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
 
+	//if xGameRow is empty then create new data for xGameRow and xStackRows
+	if (count($xGameRow) == 0) fnInitialiseRows($gameState, $xGameRow, $xStackRows);
+
 	//only continue if there are no errors
 	//calculate track and stack numbers for the move
 	if ($errCode == '') {
@@ -292,7 +326,7 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 		//calculate stackNum of next stack
 		$boostMove = False;
 		if ($xGameRow['LastPlayerID'] == $xGameRow['P1RecID']) {
-			//player 2's move
+			//P2's move
 			if ($moveDir == 3) {
 				//increment trackNum
 				$nextTrackNum = $currTrackNum + 1;
@@ -318,7 +352,7 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 			}
 		}
 		else {
-			//player 1's move
+			//P1's move
 			if ($moveDir == 3) {
 				//decrement trackNum
 				$nextTrackNum = $currTrackNum - 1;
@@ -512,7 +546,7 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 
 	//echo 'endup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
 
-	return array($errCode,$errMsg);
+	return array("errCode" => $errCode, "errMsg" => $errMsg) ; 
 }
 // End of fnSimulateMove
 function RunGCP3 ($playerName, $gameRef){
@@ -677,6 +711,7 @@ function RunGCP3 ($playerName, $gameRef){
                         i. Save record ID as $originalGSActionRecID
                         ii. Make record ID the current GSA rec
                         iii. Call Expansion($gsActionRows, $currentGSARecID)
+						//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
                         iv. If returned record ID > 0 then make it the current GSA rec
                             1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
                                 a) Call Rollout (NextGameState, [], [])
@@ -689,7 +724,7 @@ function RunGCP3 ($playerName, $gameRef){
 
 						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
 						//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
-						if (is_Sring($fnResp)) {
+						if (is_String($fnResp)) {
 							//error has occurred
 							$errCode= 'GC3-11';
 							$errMsg = $fnResp;
@@ -697,15 +732,31 @@ function RunGCP3 ($playerName, $gameRef){
 						}
 						else {
 							$gsActionRowsIndex = $fnResp;
-							if ($gsaIndex > 0) {
+							if ($gsActionRowsIndex >= 0) {
 								$currentGSActionRecID = $gsActionRows[$gsActionRowsIndex][GSARecID];
 								$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
-								if (is_Sring($fnResp)) {
-									$errMsg = 'GC3-12';
-									$errCode = $fnResp;
+								//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
+								//Game won codes: ROL-2 (P2), ROL-3 (P1), ROL-6 (P2), ROL-7 (P1), ROL-10 (Draw)
+								if ($fnResp['errCode'] == 'ROL-1' or $fnResp['errCode'] == 'ROL-4' or 
+										$fnResp['errCode'] == 'ROL-5' or $fnResp['errCode'] == 'ROL-8') {
+									$errCode = 'GC3-12';
+									$errMsg = $fnResp['errMsg'];
 								}
 								else {
-									$score = $fnResp;
+									//If P1 wins score is +1, P2 wins score is -1, if game is drawn score is 0 
+									switch ($fnResp['errCode']) {
+										case 'ROL-2':
+										case 'ROL-6':
+											$score = -1;
+											break;
+										case 'ROL-3':
+										case 'ROL-7':
+											$score = 1;
+											break;
+										case 'ROL-10'
+											$score = 0;
+											break;
+									} 
 									//add code here to call fnBackPropagation function
 									$fnResp = fnBackPropagation();
 								}
@@ -731,7 +782,7 @@ function RunGCP3 ($playerName, $gameRef){
 				if ($GSActionsCount == 1) {
 					//save rec ID
 					$GSActionOriginalRecID = $GSA
-					}
+					
 					//only parent found so create new action records for each possible move
 					else {
 						$movesList = fnGetMoves($gameRow['GameRecID'], $gameRow, $stackRows);
@@ -2449,7 +2500,7 @@ function fnGetMoves($gameKey, $gameRow, $stackRows, $quick=False) {
 			}
 		}
 	}
-	//echo "errcode after reserve checks=".$errCode."<"."<BR>";
+	//echo "errCode after reserve checks=".$errCode."<"."<BR>";
 	if (strlen($errCode)==0){
 		//loop to find all the possible moves in the playing area
 		if ($gameRow['LastPlayerID'] == $gameRow['P1RecID']) {
