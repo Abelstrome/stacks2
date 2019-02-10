@@ -756,9 +756,15 @@ function RunGCP3 ($playerName, $gameRef){
 										case 'ROL-10'
 											$score = 0;
 											break;
-									} 
-									//add code here to call fnBackPropagation function
-									$fnResp = fnBackPropagation();
+										default:
+											$errCode = 'GC3-15';
+											$errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
+											fnLogMessageToDb($errCode.$errMsg);
+										}
+									if ($errCode == '') {
+										//add code here to call fnBackPropagation function
+										$fnResp = fnBackPropagation();
+									}
 								}
 							}
 							else {
