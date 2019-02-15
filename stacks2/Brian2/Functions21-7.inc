@@ -706,8 +706,8 @@ function RunGCP3 ($playerName, $gameRef){
 				$gsActionsCount = count($fnResp);
 				$gsActionRows = $fnResp;
 				switch ($gsActionsCount) {
-					case 0:
-                        /*zero records so
+					case 1: // one GSA record so ...
+                        /*
                         i. Save record ID as $originalGSActionRecID
                         ii. Make record ID the current GSA rec
                         iii. Call Expansion($gsActionRows, $currentGSARecID)
@@ -741,6 +741,7 @@ function RunGCP3 ($playerName, $gameRef){
 										$fnResp['errCode'] == 'ROL-5' or $fnResp['errCode'] == 'ROL-8') {
 									$errCode = 'GC3-12';
 									$errMsg = $fnResp['errMsg'];
+									fnLogMessageToDb($errCode.$errMsg);
 								}
 								else {
 									//If P1 wins score is +1, P2 wins score is -1, if game is drawn score is 0 
@@ -773,11 +774,11 @@ function RunGCP3 ($playerName, $gameRef){
 						}
 						break;
 
-					case 1: //one record so go to Expansion
+					case 0: //zero GSA records so ...
 
 						break:
 
-					default: //more than one record so go to Selection
+					default: //more than one GSA records so ...
 						$GSActionRows = $fnResp;
 						break:
 				}
