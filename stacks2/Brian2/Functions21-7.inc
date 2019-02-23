@@ -114,7 +114,7 @@ Contains code (fnSimulateMove) to simulate a game without affecting the real gam
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
 Contains code (fnRollout) for playing a game to the end without updaing the database.
 Contains code (fnSetUpGSActions) for setting up new GSA records. See MTSC 3-2 design. Desktop change. Tablet change2 v2.
-Codenvy updates
+
 */
 
 //Global variables for database queries
@@ -703,29 +703,40 @@ function RunGCP3 ($playerName, $gameRef){
 				fnLogMessageToDb($errCode.$errMsg);
 			}
 			else {
-				$gsActionsCount = count($fnResp);
 				$gsActionRows = $fnResp;
-				switch ($gsActionsCount) {
-					case 1: // one GSA record so ...
-                        /*
-                        i. Save record ID as $originalGSActionRecID
-                        ii. Make record ID the current GSA rec
-                        iii. Call Expansion($gsActionRows, $currentGSARecID)
-						//***should fnExpansion return the index of the current GSA in $gsActionRows instead of a RecID?
-                        iv. If returned record ID > 0 then make it the current GSA rec
-                            1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
-                                a) Call Rollout (NextGameState, [], [])
-                            2) Call Back Propagation to update parent records with the score from Rollout
-                                a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
-                        v. If returned record ID = 0 go to b. and call Selection
-                        */
-						$originalGSActionRecID = $gsActionRows[0][GSARecID];
-						$currentGSActionRecID = $gsActionRows[0][GSARecID];
-
+				If (count($fnResp) == 0) {
+					//zero GSA records so ...
+				}
+				else {
+					/* one or more GSA records so ...
+					i. Call fnSelection($gsActionRows)
+					ii. Save record ID as returned record as $originalGSActionRecID
+					iii. Make record ID the current GSA rec
+					iv. Call Expansion($gsActionRows, $currentGSARecID)
+					v. If returned record ID > 0 then make it the current GSA rec
+						1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
+							a) Call Rollout (NextGameState, [], [])
+						2) Call Back Propagation to update parent records with the score from Rollout
+							a) Call fnBackPropagation($currentGSARecID, $originalGSActionRecID, score)
+					vi. If returned record ID = 0 go to b. and call Selection
+					*/
+					//call fnSelection
+					$fnResp = fnSelection($gsActionRows);
+					if (is_String($fnResp)) {
+						//error has occurred
+						$errCode= 'GC3-17';
+						$errMsg = $fnResp;
+						fnLogMessageToDb($errCode.$errMsg);
+					}
+					else {
+						//make original and current GSA the rec ID returned by fnSelection
+						$originalGSActionRecID = $fnResp;
+						$currentGSActionRecID = $fnResp;
+						//call fnExpansion
 						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
 						//response can be a string indicating an error,
-                    	//	or -1 indicating need to call fnSelection again because there are new GSA records
-                    	//	or a number which is the GSA rec ID of the new current record
+						//	or -1 indicating need to call fnSelection again because there are new GSA records
+						//	or a number which is the GSA rec ID of the new current record
 						if (is_String($fnResp)) {
 							//error has occurred
 							$errCode= 'GC3-11';
@@ -733,19 +744,19 @@ function RunGCP3 ($playerName, $gameRef){
 							fnLogMessageToDb($errCode.$errMsg);
 						}
 						else {
-                          	//fnExpansion retured a value
+							//fnExpansion retured a positive value
 							if ($fnResp >= 0) {
 								$currentGSActionRecID = $fnResp;
-                              	//get GSA record
-                              	$fnResp = fnQrySelectGSActionParent($currentGSActionRecID);
-                              	if (is_string($fnResp)){
-                                  $errCode = 'GC3-16';
-                                  $errMsg = $fnRep;
-                                  fnLogMessageToDb($errCode.$errMsg);
-                                }
-                              	else {
-                                  $gsActionRows = $fnResp;
-                              		//call Rollout
+								//get GSA record
+								$fnResp = fnQrySelectGSActionParent($currentGSActionRecID);
+								if (is_string($fnResp)){
+									$errCode = 'GC3-16';
+									$errMsg = $fnResp;
+									fnLogMessageToDb($errCode.$errMsg);
+								}
+								else {
+									$gsActionRows = $fnResp;
+									//call Rollout
 									$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
 									//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
 									//Game won codes: ROL-2 (P2), ROL-3 (P1), ROL-6 (P2), ROL-7 (P1), ROL-10 (Draw)
@@ -758,42 +769,35 @@ function RunGCP3 ($playerName, $gameRef){
 									else {
 										//If P1 wins score is +1, P2 wins score is -1, if game is drawn score is 0
 										switch ($fnResp['errCode']) {
-                                          case 'ROL-2':
-                                          case 'ROL-6':
-                                              $score = -1;
-                                              break;
-                                          case 'ROL-3':
-                                          case 'ROL-7':
-                                              $score = 1;
-                                              break;
-                                          case 'ROL-10'
-                                              $score = 0;
-                                              break;
-                                          default:
-                                              $errCode = 'GC3-15';
-                                              $errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
-                                              fnLogMessageToDb($errCode.$errMsg);
-                                          }
-                                      if ($errCode == '') {
-                                          //add code here to call fnBackPropagation function
-                                          $fnResp = fnBackPropagation();
-                                      }
-                                	}
+										  case 'ROL-2':
+										  case 'ROL-6':
+											  $score = -1;
+											  break;
+										  case 'ROL-3':
+										  case 'ROL-7':
+											  $score = 1;
+											  break;
+										  case 'ROL-10'
+											  $score = 0;
+											  break;
+										  default:
+											  $errCode = 'GC3-15';
+											  $errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
+											  fnLogMessageToDb($errCode.$errMsg);
+										  }
+										if ($errCode == '') {
+											//add code here to call fnBackPropagation function
+											$fnResp = fnBackPropagation();
+										}
+									}
 								}
 							}
+							//fnExpansion response < 0 so need to call fnSelection again
 							else {
-								//fnExpansion response <0 so need to call fnSelection
+								//add codeto loop around the P1 actions again
 							}
 						}
-						break;
-
-					case 0: //zero GSA records so ...
-
-						break:
-
-					default: //more than one GSA records so ...
-						$GSActionRows = $fnResp;
-						break:
+					}
 				}
 			}
 
@@ -832,13 +836,15 @@ function RunGCP3 ($playerName, $gameRef){
 					}
 				}
 			}
-		}
-	}
+		} 
+		//end of actions for P1 player only
+	} 
+	// end of while loop
 }
 // End of fnRunGCP3
 function $fnSetUpGSActions($board){
 	/*
-	Use this function when unable to find a GSA records for a given board (game state)
+	Use this function when unable to find GSA records for a given board (game state)
 	*/
 }
 // End of fnSetUpGSActions
