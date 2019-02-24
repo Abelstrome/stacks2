@@ -448,7 +448,7 @@ function fnQrySelectGSActionMoves($gameState, $root = 'N') {
 			return $gsActionRows; }
 		else {
 			fnLogMessageToDb('fnQrySelectGSActionMoves - GSA for ' . $gameState . ' not found');
-			return 'GSA for ' . $gameState . ' not found'; }
+			return []; }
 	}
 	catch(PDOException $e) {
 		if ($root = 'N') $errMsg = 'qrySelectGSActionMoves failed: ' . $e->getMessage();
