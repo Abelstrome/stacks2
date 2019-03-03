@@ -113,7 +113,7 @@ Contains code for Monte Carlo Tree Search
 Contains code (fnSimulateMove) to simulate a game without affecting the real game stored in the database
  - The start point is an encoded board so only the identities (P1 or P2) of counters at the top of a stack are known. As required the identity of counters is chosen at random.
 Contains code (fnRollout) for playing a game to the end without updaing the database.
-Contains code (fnSetUpGSActions) for setting up new GSA records. See MTSC 3-2 design. Desktop change. Tablet change2 v2.
+Contains code (fnSetUpGSARecs) for setting up new GSA records. 
 Contains code (fnBackPropagation) for updating the value of GSA action records
 */
 
@@ -764,7 +764,7 @@ function RunGCP3 ($playerName, $gameRef){
 						i. Call Setup(encoded board)
 						ii. There will now be one or more records so go to a. and call Selection
 					*/
-					$fnResp = fnSetUpGSActions($board);
+					$fnResp = fnSetUpGSARecs($gameRow, $stackRows);
 				}
 				else {
 					/* one or more GSA records so ...
@@ -864,54 +864,44 @@ function RunGCP3 ($playerName, $gameRef){
 					}
 				}
 			}
-
-			//only continue if there are no errors
-			if ($errCode == '') {
-				if ($GSActionsCount == 1) {
-					//save rec ID
-					$GSActionOriginalRecID = $GSA
-
-					//only parent found so create new action records for each possible move
-					else {
-						$movesList = fnGetMoves($gameRow['GameRecID'], $gameRow, $stackRows);
-						if (is_string($movesList)) {
-							$errCode = 'GC3-13';
-							$errMsg = $movesList;
-							fnLogMessageToDb($errCode.$errMsg);
-						}
-						else {
-							//start database transaction
-							$conn->beginTransaction();
-							foreach ($movesList as $aMove){
-								//create an GSAction record
-								$fnResp = fnQryAddGSAction($board, 0 , "", $aMove[1], $aMove[2]);
-								if (strlen($fnResp) > 0) {
-									//error has occurred
-									$errCode = 'GC3-14';
-									$errMsg = $fnResp;
-									fnLogMessageToDb($errCode.$errMsg);
-									break;
-								}
-							}
-							//end database transaction
-							if (strlen($errCode) > 0) $conn->rollback();
-							else $conn->commit();
-						}
-					}
-				}
-			}
 		} 
 		//end of actions for P1 player only
 	} 
 	// end of while loop
 }
 // End of fnRunGCP3
-function $fnSetUpGSActions($board){
+function $fnSetUpGSARecs($board, $gameRow, $stackRows){
 	/*
-	Use this function when unable to find GSA records for a given board (game state)
+	Use this function when unable to find GSA records for a given game
 	*/
+	fnLogMessageToDb('start fnSetUpGSARecs');
+	$movesList = fnGetMoves('', $gameRow, $stackRows);
+		if (is_string($movesList)) {
+			$errCode = 'SUG-1';
+			$errMsg = $movesList;
+			fnLogMessageToDb($errCode.$errMsg);
+		}
+		else {
+			//start database transaction
+			$conn->beginTransaction();
+			foreach ($movesList as $aMove){
+				//create an GSAction record
+				$fnResp = fnQryAddGSAction($board, 0 , "", $aMove[1], $aMove[2]);
+				if (strlen($fnResp) > 0) {
+					//error has occurred
+					$errCode = 'SUG-2';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+					break;
+				}
+			}
+			//end database transaction
+			if (strlen($errCode) > 0) $conn->rollback();
+			else $conn->commit();
+		}
+		
 }
-// End of fnSetUpGSActions
+// End of fnSetUpGSARecs
 function fnRunGCP2($playerName, $gameRef) {
 	global $logLevel;
 	$errCode = '';
