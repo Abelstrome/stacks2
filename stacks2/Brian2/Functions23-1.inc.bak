@@ -1,7 +1,7 @@
 <?php
 function fnDbConnect() {
 	global $conn;
-	global $qryAddGSAction, $qryUpdateGSAction, $qrySelectGSActionMoves, $qrySelectGSActionRoot, $qrySelectGSActionParent;
+	global $qryAddGSAction, $qryUpdateGSAction, $qrySelectGSActionMoves, $qrySelectGSActionRoot, $qrySelectGSActionRec;
 	global $qrySelectGCPlayerData, $qryAddGCPlayerData, $qryUpdateGCPlayerData;
 	global $qrySelectGCPlayerData2, $qryAddGCPlayerData2, $qryUpdateGCPlayerData2;
 	global $qryAddPlayer, $qrySelectPlayer;
@@ -227,7 +227,7 @@ function fnDbConnect() {
 
 		//Select GSA parent
 		$query = 'SELECT * FROM  v2_gamestateaction WHERE GSRecID = :gsRecID';
-		$qrySelectGSActionParent = $conn->prepare($query);
+		$qrySelectGSActionRec = $conn->prepare($query);
 				
 		fnLogMessageToDb("Connection successful");
 		fnQrySelectRefs();
@@ -384,34 +384,34 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 		return $errMsg; }
 }
 //End fnQryUpdateGSAction
-function fnQrySelectGSActionParent($fromGSRecID) {
-	global $qrySelectGSActionParent, $logLevel;
-	fnLogMessageToDb("start fnQrySelectGSActionParent");
+function fnQrySelectGSActionRec($fromGSRecID) {
+	global $qrySelectGSActionRec, $logLevel;
+	fnLogMessageToDb("start fnQrySelectGSActionRec");
 
 	//execute prepared query
 	$rowCount=0;
 	try {
 		//execute query
-		$qrySelectGSActionParent->execute(array(':gsRecID' => $fromGSRecID));
+		$qrySelectGSActionRec->execute(array(':gsRecID' => $fromGSRecID));
 		// set the resulting array to associative
-		$result = $qrySelectGSActionParent->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGSActionParent->fetchAll() as $aGSActionRow) { 
+		$result = $qrySelectGSActionRec->setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectGSActionRec->fetchAll() as $aGSActionRow) { 
 			$gsActionRows[] = $aGSActionRow;
 			$rowCount++; }
 		
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
-			fnLogMessageToDb('fnQrySelectGSActionParent - GSA for ' . $fromGSRecID . ' not found');
+			fnLogMessageToDb('fnQrySelectGSActionRec - GSA for ' . $fromGSRecID . ' not found');
 			return 'GSA for ' . $fromGSRecID . ' not found'; }
 	}
 	catch(PDOException $e) {
-		$errMsg = 'qrySelectGSActionParent failed: ' . $e->getMessage();
+		$errMsg = 'qrySelectGSActionRec failed: ' . $e->getMessage();
 		fnLogMessageToDb($errMsg);
 		return $errMsg;
 	}
 }
-//End fnQrySelectGSActionParent
+//End fnQrySelectGSActionRec
 function fnQrySelectGSActionMoves($gameState, $root = 'N') {
 	global $qrySelectGSActionMoves, $qrySelectGSActionRoot, $logLevel;
 	fnLogMessageToDb('start fnQrySelectGSActionMoves. root=' . $root);

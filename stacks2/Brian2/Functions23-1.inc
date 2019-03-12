@@ -218,14 +218,14 @@ function fnDbConnect() {
 		$qryUpdateGSAction = $conn->prepare($query);
 		
 		//Select GSA move records
-		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState';
+		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND MoveDir > 0';
 		$qrySelectGSActionMoves = $conn->prepare($query);
 		
-		//Select GSA root record
-		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND NextGameState = :emptyString';
+		//Select GSA parent record
+		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND MoveDir = 0';
 		$qrySelectGSActionRoot = $conn->prepare($query);
 
-		//Select GSA parent
+		//Select GSA record
 		$query = 'SELECT * FROM  v2_gamestateaction WHERE GSRecID = :gsRecID';
 		$qrySelectGSActionRec = $conn->prepare($query);
 				
@@ -402,8 +402,10 @@ function fnQrySelectGSActionRec($fromGSRecID) {
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
-			fnLogMessageToDb('fnQrySelectGSActionRec - GSA for ' . $fromGSRecID . ' not found');
-			return 'GSA for ' . $fromGSRecID . ' not found'; }
+			$errMsg = 'fnQrySelectGSActionRec - GSA for ' . $fromGSRecID . ' not found';
+			fnLogMessageToDb($errMsg);
+			return $errMsg;
+		}
 	}
 	catch(PDOException $e) {
 		$errMsg = 'qrySelectGSActionRec failed: ' . $e->getMessage();
@@ -435,9 +437,9 @@ function fnQrySelectGSActionMoves($gameState, $root = 'N') {
 				$rowCount++; }
 		}
 		else {
-			//execute query to find only root record (where NextGameState is empty)
+			//execute query to find only root record (owner of the move records)
 			$emptyString = '';
-			$qrySelectGSActionRoot->execute(array(':gameState' => $gameState, ':emptyString' => $emptyString));
+			$qrySelectGSActionRoot->execute(array(':gameState' => $gameState));
 			// set the resulting array to associative
 			$result = $qrySelectGSActionRoot -> setFetchMode(PDO::FETCH_ASSOC); 
 			foreach($qrySelectGSActionRoot -> fetchAll() as $aGSActionRow) { 
@@ -447,8 +449,12 @@ function fnQrySelectGSActionMoves($gameState, $root = 'N') {
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
-			fnLogMessageToDb('fnQrySelectGSActionMoves - GSA for ' . $gameState . ' not found');
-			return []; }
+			if ($root == 'N') $errMsg = 'fnQrySelectGSActionMoves - GSA move recs for ' . $gameState . ' not found';
+			else $errMsg = 'fnQrySelectGSActionMoves - GSA parent rec for ' . $gameState . ' not found';
+			fnLogMessageToDb($errMsg);
+			//this may not be an error so don't return error message
+			return []; 
+		}
 	}
 	catch(PDOException $e) {
 		if ($root = 'N') $errMsg = 'qrySelectGSActionMoves failed: ' . $e->getMessage();
