@@ -183,7 +183,7 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 						$errCode2 = 'ROL-9';
 						$errMsg2 = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
 						fnLogMessageToDb($errCode2.$errMsg2);
-						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2], []);
+						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
 						// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
 						// Error codes: SMO-3, SMO-7
 						if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
@@ -192,13 +192,15 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 							$errMsg = $fnResp;
 							fnLogMessageToDb($errCode.$errMsg);
 						}
-						elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+						//elseif ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+						elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
 							// P2 has won
 							$errCode = 'ROL-6';
 							$errMsg = 'P2 has won';
 							fnLogMessageToDb($errCode.$errMsg);
 						}
-						elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+						//elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+						elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
 							// P1 has won
 							$errCode = 'ROL-7';
 							$errMsg = 'P1 has won';
@@ -233,33 +235,44 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 	return array("errCode" => $errCode, "errMsg" => $errMsg) ;
 }
 //End fnRollout
-function fnBackPropagation($score, $originalGSActionRecID, $currentGSActionRecID){
-	//Update the score on the current record and its parents
-	global $logLevel;
+function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
+
+	/*Update the score on the current record and its parents
+	Loop through the GSAs in the GSARecIDs list starting at the end
+		a. Get a GSAction record using the next rec ID in GSARecIDs
+		b. Update GSAction record. Set
+			i. NumVisits++
+			ii. TotalScore = TotalScore + $score 
+		c. Find the parent of the GSA rec
+			i. Call fnQrySelectGSActionParent(GSARecID = FromGSRecID)
+			ii. Update parent. Set
+				1) NumVisits++
+				2) TotalScore = TotalScore + $score
+	Repeat previous step 2 until get to end of  GSARecIDs list
+	Check GSRecID of current parent = originalGSActionRecID. If not then raise an error and stop
+	*/
+
+	fnLogMessageToDb('(' . $logLevel . ') start fnBackPropagation');
+	global $logLevel, $conn;
 	$errCode = '';
 	$errMsg = '';
-	$continueLoop = True;
-	fnLogMessageToDb('(' . $logLevel . ') start fnBackPropagation');
-	/*
-	Update the score on the current record and its parents
-	1. Update current GSAction record. Set
-		a. NumVisits++
-		b. TotalScore = TotalScore + $score 
-	2. If FromGSRecID > 0 then
-		a. Find parent record using FromGSRecID and make it the current GSAction record
-		b. If record ID  = OriginalGSActionRecID set flag to stop loop
-	3. Repeat previous 2 steps while FromGSRecID > 0 or until flag to stop loop is set 
-	*/
-	while ($continueLoop and $errCode == '') {
-		$fnResp = fnQrySelectGSActionRec($currentGSActionRecID);
+	
+	//start database transaction
+	$logMsgs = array("rewrite log msgs after rollback");
+	$conn->beginTransaction();
+
+	$gsRecIDsPtr = count($gsRecIDs) - 1;
+	while ($gsRecIDsPtr >= 0 and $errCode == '') {
+		$fnResp = fnQrySelectGSActionRec($gsRecIDs[$gsRecIDsPtr]);
 		if (is_String($fnResp)){
 			//error has occured
 			$errCode = 'BP-1';
 			$errMsg = $fnResp;
 			fnLogMessageToDb($errCode.$errMsg);
+			$logMsgs[] = $errCode.$errMsg;
 		}
 		else {
-			//found record - now update it
+			//b. Update GSAction record
 			$gsActionRows = $fnResp;
 			$gsActionRows[0]['NumVisits']++;
 			$gsActionRows[0]['TotalScore'] += $score;
@@ -273,17 +286,57 @@ function fnBackPropagation($score, $originalGSActionRecID, $currentGSActionRecID
 				$errCode = 'BP-2';
 				$errMsg = $fnResp;
 				fnLogMessageToDb($errCode.$errMsg);
+				$logMsgs[] = $errCode.$errMsg;
 			}
 		}
 		if ($errCode == ''){
-			//a. Set current GSA rec ID to FromGSRecID 
-			if ($gsActionRows[0]['FromGSRecID'] > 0) $currentGSActionRecID = $gsActionRows[0]['FromGSRecID'];
-			else $continueLoop = False;
-			//b. If record ID  = OriginalGSActionRecID set flag to stop loop
-			if ($gsActionRows[0]['GSRecID'] == $originalGSActionRecID) $continueLoop = False;
+			//c. Find the parent of the GSA rec
+			$fnResp = fnQrySelectGSActionRec($gsActionRows[0]['FromGSRecID']);
+			if (is_String($fnResp)){
+				//error has occured
+				$errCode = 'BP-2';
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg);
+				$logMsgs[] = $errCode.$errMsg;
+			}
+			else {
+				$gsActionRows = $fnResp;
+				$gsActionRows[0]['NumVisits']++;
+				$gsActionRows[0]['TotalScore'] += $score;
+				//store updates
+				$fnResp = fnQryUpdateGSAction($gsActionRows[0]['GSRecID'], $gsActionRows[0]['GameState'], 
+												$gsActionRows[0]['MoveDir'], $gsActionRows[0]['MovePos'], 
+												$gsActionRows[0]['FromGSRecID'], $gsActionRows[0]['NextGameState'], 
+												$gsActionRows[0]['TotalScore'], $gsActionRows[0]['NumVisits']);
+				if (strlen($fnResp) > 0) {
+					//error has occured
+					$errCode = 'BP-3';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+					$logMsgs[] = $errCode.$errMsg;
+				}
+			}
 		}
+		//move pointer
+		$gsRecIDsPtr--;
+
 	} //end of while loop
-	
+
+	//Check GSRecID of current parent = originalGSActionRecID. If not then raise an error and stop
+	if ($gsActionRows[0]['GSRecID'] != $originalGSActionRecID){
+		$errCode = 'BP-4';
+		$errMsg = 'GSARecIDs have not lead back to the original parent record';
+		fnLogMessageToDb($errCode.$errMsg);
+		$logMsgs[] = $errCode.$errMsg;
+	}
+		
+	if (strlen($errCode) > 0){
+		$conn->rollback();
+		foreach ($logMsgs as $msgs) {fnLogMessageToDb($msgs);}
+		fnLogMessageToDb ("fnBackPropagation - Rollback");
+	} 
+	else $conn->commit();
+
 	return $errCode.$errMsg;
 }
 //End of fnBackPropagation
@@ -355,10 +408,16 @@ function fnInitialiseRows($gameState, &$xGameRow, &$xStackRows){
 	}
 }
 //End fnInitialiseRows
-function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos, $newGameState) {
+function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos) {
 	/* This funnction is used to simlate a game.
-	The start point is provided ($gameState) in the format of an encoded board and therefore only contains the onwership and height of each stack.
-	If the simularted game is already in progress then xGameRow and xStackRows contain the same info as a normal game otherwise they are empty
+	The start point is provided ($gameState) in the format of an encoded board and therefore only contains the onwership and 
+	height of each stack.
+	If the simulated game is already in progress then xGameRow and xStackRows contain the same info as a normal game otherwise 
+	they are empty
+	When the move has been completed:
+	- xGameRow and xStackRows will be updated
+	- if a player has wont a code and message will be returned
+	- if an error has occurred a code and message will be returned
 	*/
 	$errCode = ''; $errMsg = '';
 	fnLogMessageToDb('start fnSimulateMove');
@@ -457,7 +516,7 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 		$xStackRows[$stackRowsIndex]['Counters'] = substr($xStackRows[$stackRowsIndex]['Counters'], 0, strlen($xStackRows[$stackRowsIndex]['Counters']) - $countToMove);
 		//echo ' stack reduced to >' . $xStackRows[$stackRowsIndex]['Counters'] . '<';
 		//reduce height of current stack
-		//echo '<br>'.'heightt='.$xStackRows[$stackRowsIndex]['StackHeight'];
+		//echo '<br>'.'height='.$xStackRows[$stackRowsIndex]['StackHeight'];
 		$xStackRows[$stackRowsIndex]['StackHeight'] -= $countToMove;
 		//echo ' then reduces to '.$xStackRows[$stackRowsIndex]['StackHeight'];
 		//update owner of current stack
@@ -603,29 +662,155 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 	return array("errCode" => $errCode, "errMsg" => $errMsg) ;
 }
 //End of fnSimulateMove
-function fnSelection($gsActionRows){
+function fnSelection($gsActionRows, $gsActionParent){
+	fnLogMessageToDb('start fnSelection');
 	/*
-	1. Use UCB1 formula to choose which sub node to go to next by selecting the sub node with highest UCB1.
-		a. UCB1 = average score (ie T/N) of sub node + (
-			C * (
-			square root (natural log(parent (current) node visits)/sub node visits)
-			))
-		b. Assume C = 2
-		c. If sub node visits is zero the UCB1 is infinite. 
-		d. If all sub nodes have zero visits then select first one without calculating UCB1’s.
-	2. If the selected sub node is a leaf node (no child nodes) then:
-		a. Make the selected sub node the current node. 
-		b. Go to Node Expansion. 
-	3. If the selected sub node is not a leaf node then:
-		a. Make the selected sub node the current node. 
-		b. Find all sub nodes for the current node. 
-		c. Repeat Selection to choose which sub node to go to next. 
+	2. Create a list of GSRecIDs that have been the current GSA.
+	
+	3. If there is only one record in $gsActionRows then
+		a. Selected record index [0] = index of record
+	4. If there is more than one record in $gsActionRows then calculate UCB1 score for each of the record
+	5. The index of the chosen record(s) is in a list. If there is more than one then select the current GSA at random.
+	6. Add current GSARecID to the end of the GSRecIDs list
+	7. Find all possible moves on NextGameState of chosen record (This will be a list of moves for P2) and choose one at random.
+	8. Simulate random move on NextGameState to produce a new GameState
+	9. Check if GSA parent exists for the new GameState. 
+		a. Call fnQrySelectGSActionParent($gameState = new GameState) 
+	10. If parent record exists then 
+		a. Call fnQrySelectGSActionChildMoves($gameState = new GameState, FromGSRecID = GSARecID)  to get gsActionRows
+		b. Loop round again from step 3.
+	11. If parent record does not exist then return GSRecIDs
 	*/
-	//if there is only one record then its a no brainer
-	if (count($gsActionRows) == 0) return $gsActionRows[0]['GSRecID'];
 	
-	//see if there are any 
+	$gsRecIDs = [];
 	
+	while (){
+		$gsActionRowsCount = count($gsActionRows);
+		//3. If there is only one record in $gsActionRows then Selected record index [0] = index of record
+		if ($gsActionRowsCount == 1) {
+			$bestIndexes[0] = 0; 
+			$gsRecIDs[] = $gsActionRows[0]['GSRecID'];
+		}
+		else {
+			//4. If there is more than one record in $gsActionRows then calculate UCB1 score for each of the record
+			$bestUCB1Score = 0;
+			$bestIndexes = [];
+			$maxScore = 9999;
+			//Loop through all records calculating UCB1 score
+			for ($i=0; $i < $gsActionRowsCount, $i++) {
+				//if $gsActionRow['NumVisits'] = 0 then score = big number
+				if ($gsActionRows[$i]['NumVisits'] == 0) $ucb1Score = $maxScore;
+				elseif ($gsActionRows[$i]['WinMove'] == 'Y') $ucb1Score = $maxScore + 1;
+				elseif ($gsActionRows[$i]['WinMove'] == 'L') $ucb1Score = -1;
+				//calculate UCB1 score
+				else $ucb1Score = $gsActionRows[$i]['AvScore'] + 
+						(2 * sqrt(log($gsActionParent['NumVisits']) / $gsActionRows[$i]['NumVisits']));
+				
+				//if calculated score = bestScore then just add index to list
+				if ($ucb1Score == $bestScore) $bestIndexes[] = $i;
+				//if calculatedScore > bestScore then make score the best score and reset index list
+				elseif ($ucb1Score > $bestScore) {
+					$bestScore = $ucb1Score;
+					$bestIndexes = [];
+					$bestIndexes[] = $i;
+				}
+			} //end of loop calculating UCB1 scores for gsActionRows
+			
+			//6. Add current GSARecID to the end of the GSRecIDs list
+			//choose a record at random
+			if (count($bestIndexes) == 1) $gsRecIDs[] = $gsActionRows[$bestIndexes[0]]['GSRecID'];
+			else {
+				if (shuffle($bestIndexes)) $gsRecIDs[] = $gsActionRows[$bestIndexes[0]]['GSRecID'];
+				else {
+					//error in shuffle routine
+					$errCode = 'SEL-1';
+					$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($bestIndexes, True);
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+			}
+		}
+		if ($errCode == '') {
+			/*
+			7. Find all possible moves on NextGameState of chosen record (This will be a list of moves for P2) and choose one at random.
+			Call fnInitialiseRows to create dummy gameRows and stackRows based on NextGameState of chosen GSA
+			Call fnGetMoves to find all possible moves 
+			*/
+			xGameRow = [];
+			xStackRows = [];
+			$winMove = 'N';
+			//fnInitialiseRows will process game state and put equivalent data into xGameRow and xStackRows
+			fnInitialiseRows($gsActionRows[$bestIndexes[0]]['NextGameState'], $xGameRow, $xStackRows);
+			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows)
+			if (is_string($fnResp)) {
+				$errCode = 'SEL-2';
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg); }
+			else {
+				//8. Simulate random move on NextGameState to produce a new GameState
+				$movesList = $fnResp;
+				if (shuffle($movesList)) {
+					$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
+					// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+					// Error codes: SMO-3, SMO-7
+					if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+						//fnSimulateMove returned an error code
+						$errCode = 'SEL-4';
+						$errMsg = $fnResp;
+						fnLogMessageToDb($errCode.$errMsg);
+					}
+					//elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+					elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
+						// P2 has won
+						$winMove = 'L';
+						$errCode2 = 'SEL-6';
+						$errMsg = 'P2 has won';
+						fnLogMessageToDb($errCode2.$errMsg);
+					}
+					//elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+					elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
+						// P1 has won
+						$winMove = 'Y';
+						$errCode2 = 'SEL-7';
+						$errMsg = 'P1 has won';
+						fnLogMessageToDb($errCode2.$errMsg);
+					}
+					else {
+						//unknown response code
+						$errCode = 'SEL-5';
+						$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+						fnLogMessageToDb($errCode.$errMsg);
+					}
+				}
+				else {
+					//error in shuffle routine
+					$errCode = 'SEL-3';
+					$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+			}
+		}
+		if ($errCode == '') {
+			//9. Check if GSA parent exists for the new GameState. 
+			$board = fnEncodeBoard($xStackRows, $xGameRow);
+			$fnResp = fnQrySelectGSActionParent($board);
+			if (is_string($fnResp)){
+				//error has occurred
+				$errCode = 'SEL-8';
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+			else {
+				$gsActionParent = $fnResp;
+				if (count($gsActionParent) > 0) {
+				//10. If parent record exists then call fnQrySelectGSActionChildMoves to get gsActionRows and loop round again from step 3.
+				}
+				else {
+					//11. If parent record does not exist then return GSRecIDs
+				}
+			}
+		}
+	} //end of while loop
+
 }
 //End of fnSelection
 function fnRunGCP3 ($playerName, $gameRef){
@@ -774,8 +959,8 @@ function fnRunGCP3 ($playerName, $gameRef){
 		if ($errCode == '' and $moved == False and $player1or2 == 1) {
 			$originalGSActionRecID = -1;
 			$board = fnEncodeBoard($stackRows, $gameRow);
-			//search to find GSAction records for current board
-			$fnResp = fnQrySelectGSActionMoves($board);
+			//search to find GSAction parent for current board
+			$fnResp = fnQrySelectGSActionParent($board);
 			if (is_string($fnResp)){
 				//error has occurred
 				$errCode = 'GC3-10';
@@ -785,33 +970,41 @@ function fnRunGCP3 ($playerName, $gameRef){
 			else {
 				$gsActionRows = $fnResp;
 				if (count($gsActionRows) == 0) {
-					/*zero GSA records so ...
+					/*Parent GSA record not found so ...
 					b. call Setup to create new GSA records
 						i. Call Setup(encoded board)
 						ii. There will now be one or more records so go to a. and call Selection
 					*/
 					$fnResp = fnSetUpGSARecs($board, $gameRow, $stackRows);
-					if (strlen($fnResp) > 0){
+					if (is_String($fnResp)){
 						$errCode = 'GC3-19';
 						$errMsg = $fnResp;
 						fnLogMessageToDb($errCode.$errMsg);
 					}
+					$gsActionParent = $fnResp;
+				}
+			}
+			if ($errCode == '') {
+				//Parent record found or created so now get its child move records
+				$fnResp = fnQrySelectGSActionChildMoves($board, $gsActionParent['FromGSRecID']);
+				if (is_string($fnResp)){
+					//error has occurred
+					$errCode = 'GC3-20';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
 				}
 				else {
-					/* one or more GSA records so ...
-					i. Call fnSelection($gsActionRows)
-					ii. Save record ID as returned record as $originalGSActionRecID
-					iii. Make record ID the current GSA rec
-					iv. Call Expansion($gsActionRows, $currentGSActionRecID)
-					v. If returned record ID > 0 then make it the current GSA rec
-						1) Call Rollout to get score for a simulated game starting from NextGameState on current GSA rec
-							a) Call Rollout (NextGameState, [], [])
-						2) Call Back Propagation to update parent records with the score from Rollout
-							a) Call fnBackPropagation($score, $originalGSActionRecID, $currentGSActionRecID)
-					vi. If returned record ID = 0 go to a. and call Selection
+					$gsActionRows = $fnResp;
+					/* Process GSA moves: Call Selection and then call Expansion
+					a. Call Selection ($gsActionRows) to choose which should be the current GSA record
+					b. [Save returned record ID as $originalGSActionRecID ]
+					c. Save the returned list of GSARecIDs. Make the last item in the list the current GSA record.
+					d. Call Expansion($gsActionRows, $currentGSActionRecID) to get new current GSA record ID (if it's required)
+					e. [If returned record ID > 0 then make it the current GSA rec]
+					f. If the returned GSRecID is not the current GSA then add it to the end of the list of GSARecIDs
 					*/
 					//call fnSelection
-					$fnResp = fnSelection($gsActionRows);
+					$fnResp = fnSelection($gsActionRows, $gsActionParent);
 					if (is_String($fnResp)) {
 						//error has occurred
 						$errCode= 'GC3-17';
@@ -819,14 +1012,12 @@ function fnRunGCP3 ($playerName, $gameRef){
 						fnLogMessageToDb($errCode.$errMsg);
 					}
 					else {
-						//make original and current GSA the rec ID returned by fnSelection
-						if ($originalGSActionRecID < 0) $originalGSActionRecID = $fnResp;
-						$currentGSActionRecID = $fnResp;
+						//Save the returned list of GSARecIDs. Make the last item in the list the current GSA record.
+						$gsRecIDs = $fnResp;
+						$currentGSActionRecID = end($gsRecIDs);
+
 						//call fnExpansion
 						$fnResp = fnExpansion($gsActionRows, $currentGSActionRecID);
-						//response can be a string indicating an error,
-						//	or -1 indicating need to call fnSelection again because there are new GSA records
-						//	or a number which is the GSA rec ID of the new current record
 						if (is_String($fnResp)) {
 							//error has occurred
 							$errCode= 'GC3-11';
@@ -834,76 +1025,77 @@ function fnRunGCP3 ($playerName, $gameRef){
 							fnLogMessageToDb($errCode.$errMsg);
 						}
 						else {
-							//fnExpansion retured a positive value
-							if ($fnResp >= 0) {
+							//if rec ID returned by fnExpansion is not the current GSA ID then make the returned GSRecID the current GSA rec
+							if ($fnResp != $currentGSActionRecID) {
 								$currentGSActionRecID = $fnResp;
-								//get GSA record
-								$fnResp = fnQrySelectGSActionRec($currentGSActionRecID);
-								if (is_string($fnResp)){
-									$errCode = 'GC3-16';
-									$errMsg = $fnResp;
-									fnLogMessageToDb($errCode.$errMsg);
-								}
-								else {
-									$gsActionRows = $fnResp;
-									//call Rollout
-									$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
-									//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
-									//Game won codes: ROL-2 (P2), ROL-3 (P1), ROL-6 (P2), ROL-7 (P1), ROL-10 (Draw)
-									if ($fnResp['errCode'] == 'ROL-1' or $fnResp['errCode'] == 'ROL-4' or
-											$fnResp['errCode'] == 'ROL-5' or $fnResp['errCode'] == 'ROL-8') {
-										$errCode = 'GC3-12';
-										$errMsg = $fnResp['errMsg'];
-										fnLogMessageToDb($errCode.$errMsg);
-									}
-									else {
-										//If P1 wins score is +1, P2 wins score is -1, if game is drawn score is 0
-										switch ($fnResp['errCode']) {
-											case 'ROL-2':
-											case 'ROL-6':
-												$score = -1;
-												break;
-											case 'ROL-3':
-											case 'ROL-7':
-												$score = 1;
-												break;
-											case 'ROL-10':
-												$score = 0;
-												break;
-											default:
-												$errCode = 'GC3-15';
-												$errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
-												fnLogMessageToDb($errCode.$errMsg);
-										}
-										if ($errCode == '') {
-											//call fnBackPropagation function
-											$fnResp = fnBackPropagation($score, $originalGSActionRecID, $currentGSActionRecID);
-											if (strlen($fnResp) > 0){
-												$errCode = 'GC3-18';
-												$errMsg = $fnResp;
-												fnLogMessageToDb($errCode.$errMsg);
-											}
-										}
-									}
-								}
-							}
-							else {
-								//fnExpansion response < 0 so need to call fnSelection again
-								//do nothing and just go around the while loop again
+								$gsRecIDs[] = $currentGSActionRecID;
 							}
 						}
 					}
 				}
 			}
-		} 
-		//end of actions for P1 player only
-	} 
-	// end of while loop
+			if ($errCode = '') {
+				//Call Rollout and Back Propagation
+				//get current GSA record
+				$fnResp = fnQrySelectGSActionRec($currentGSActionRecID);
+				if (is_String($fnResp)) {
+					$errCode = 'GC3-13';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+				else {
+					$gsActionRows = $fnResp;
+					//call Rollout
+					$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
+					//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
+					//Game won codes: ROL-2 (P2), ROL-3 (P1), ROL-6 (P2), ROL-7 (P1), ROL-10 (Draw)
+					switch ($fnResp['errCode']) {
+						//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
+						case 'ROL-1':
+						case 'ROL-4':
+						case 'ROL-5':
+						case 'ROL-8':
+							$errCode = 'GC3-12';
+							$errMsg = $fnResp['errMsg'];
+							fnLogMessageToDb($errCode.$errMsg);
+							break;
+						//If P2 wins score is -1
+						case 'ROL-2':
+						case 'ROL-6':
+							$score = -1;
+							break;
+						//If P1 wins score is +1
+						case 'ROL-3':
+						case 'ROL-7':
+							$score = 1;
+							break;
+						//if game is drawn score is 0
+						case 'ROL-10':
+							$score = 0;
+							break;
+						default:
+							$errCode = 'GC3-15';
+							$errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
+							fnLogMessageToDb($errCode.$errMsg);
+					}
+				}
+				if ($errCode == '') {
+					//call fnBackPropagation function
+					$fnResp = fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs);
+					if (strlen($fnResp) > 0){
+						$errCode = 'GC3-18';
+						$errMsg = $fnResp;
+						fnLogMessageToDb($errCode.$errMsg);
+					}
+				}
+			}
+		} //end of actions for P1 player only
+	} // end of while loop
 }
 // End of fnRunGCP3
 function fnSetUpGSARecs($board, $gameRow, $stackRows){
 	/*
-	Use this function when unable to find GSA records for a given game
+	Use this function when unable to find GSA records for a given game state
 	*/
 	global $conn;
 	$errCode = '';
@@ -919,16 +1111,73 @@ function fnSetUpGSARecs($board, $gameRow, $stackRows){
 		//start database transaction
 		$logMsgs = array("rewrite log msgs after rollback");
 		$conn->beginTransaction();
-		foreach ($movesList as $aMove){
-			//create an GSAction record
-			$fnResp = fnQryAddGSAction($board, 0 , "", $aMove[1], $aMove[2]);
-			if (strlen($fnResp) > 0) {
+		
+		//create parent record fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0)
+		$fnResp = fnQryAddGSAction($board, 0 , "");
+		if (strlen($fnResp) > 0) {
+			//error has occurred
+			$errCode = 'SUG-2';
+			$errMsg = $fnResp;
+			fnLogMessageToDb($errCode.$errMsg);
+			$logMsgs[] = $errCode.$errMsg;
+		}
+		else {
+			//retrieve record
+			$fnResp = fnQrySelectGSActionParent($board);
+			if (is_string($fnResp)) {
 				//error has occurred
-				$errCode = 'SUG-2';
+				$errCode = 'SUG-3';
 				$errMsg = $fnResp;
 				fnLogMessageToDb($errCode.$errMsg);
-				$logMsgs[] = $errCode.$errMsg;
-				break;
+			}
+			else {
+				$gsActionParent = $fnResp;
+				if (count($gsActionParent) == 0) {
+					$errMsg = 'GSA parent record not found';
+					$errCode = 'SUG-4';
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+			}
+		}
+		if ($errCode == '') {
+			//create child records
+			foreach ($movesList as $aMove){
+				//simulate move to create nextGameState
+				$fnResp = fnSimulateMove($board, [], [], $aMove[1], $aMove[2]);
+				// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+				// Error codes: SMO-3, SMO-7
+				if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+					//fnSimulateMove returned an error code
+					$errCode = 'SUG-5';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+				elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+					// P2 has won so losing move for P1
+					$winMove = 'L';
+				}
+				elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+					// P1 has won so winning move for P1
+					$winMove = 'Y';
+				}
+				else {
+					//unknown response code
+					$errCode = 'SUG-6';
+					$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+				if ($errCode = '') {
+					//create an GSAction record
+					$fnResp = fnQryAddGSAction($board, 0 , "", $aMove[1], $aMove[2], $winMove);
+					if (strlen($fnResp) > 0) {
+						//error has occurred
+						$errCode = 'SUG-2';
+						$errMsg = $fnResp;
+						fnLogMessageToDb($errCode.$errMsg);
+						$logMsgs[] = $errCode.$errMsg;
+						break;
+					}
+				}
 			}
 		}
 		//end database transaction
@@ -939,7 +1188,9 @@ function fnSetUpGSARecs($board, $gameRow, $stackRows){
 		} 
 		else $conn->commit();
 	}
-	return $errCode.$errMsg;
+	
+	if ($errCode == '') return $gsActionParent;
+	else return $errCode.$errMsg;
 }
 // End of fnSetUpGSARecs
 function fnRunGCP2($playerName, $gameRef) {
@@ -3020,7 +3271,7 @@ function fnProcessInput($callString) {
 					$errMsg = substr($fnResp,5, strlen($fnResp)- 5);
 				}
 				
-				//fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos, $newGameState)
+				//fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos)
 				$gameState = '800x1x5x801x0x0x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
 				$xGameRow = [];
 				$xStackRows = [];

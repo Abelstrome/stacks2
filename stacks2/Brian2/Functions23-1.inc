@@ -209,16 +209,17 @@ function fnDbConnect() {
 		$qryUpdateGCPlayerData = $conn->prepare($query);
 		
 		//Add GSA
-		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, MoveDir = :moveDir, MovePos = :movePos';
+		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, ';
+		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove'
 		$qryAddGSAction = $conn->prepare($query);
 		
 		//Update GSA
-		$query = 'UPDATE v2_gamestateaction SET GameState = :gameState, MoveDir = :moveDir, MovePos = :movePos, NextGameState =:nextGameState, FromGSRecID = :fromGSRecID, ';
-		$query = $query . 'TotalScore = :totalScore, NumVisits = :numVisits WHERE GSRecID = :gsRecID';
+		$query = 'UPDATE v2_gamestateaction SET GameState = :gameState, MoveDir = :moveDir, MovePos = :movePos, NextGameState =:nextGameState, ';
+		$query = $query . 'FromGSRecID = :fromGSRecID, TotalScore = :totalScore, NumVisits = :numVisits, WinMove = :winMove WHERE GSRecID = :gsRecID';
 		$qryUpdateGSAction = $conn->prepare($query);
 		
 		//Select GSA move records
-		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND MoveDir > 0';
+		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND FromGSRecID = :fromGSRecID';
 		$qrySelectGSActionMoves = $conn->prepare($query);
 		
 		//Select GSA parent record
@@ -330,14 +331,14 @@ function fnQrySelectGCPlayerData2($playerRef) {
 	}
 }
 //End fnQrySelectGCPlayerData2
-function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0) {
+function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0, $winMove = '') {
 	fnLogMessageToDb('start fnQryAddGSAction');
 	global $qryAddGSAction;
 	$errMsg = '';
 
 	try {
 		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState, 
-								':moveDir' => $moveDir,':movePos' => $movePos));
+								':moveDir' => $moveDir,':movePos' => $movePos, ':winMove' => $winMove));
 	}
 	catch(PDOException $e) {
 		$errMsg = "qryAddGSAction failed (for GameState " . $gameState . ' and fromGSRecID ' . $fromGSRecID . '): ' . $e->getMessage();
@@ -352,7 +353,7 @@ function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0
 		return $errMsg; }
 }
 //End fnQryAddGSAction
-function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRecID, $nextGameState, $totalScore, $numVisits) {
+function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRecID, $nextGameState, $totalScore, $numVisits, $winMove) {
 	fnLogMessageToDb('start fnQryUpdateGSAction');
 	global $qryUpdateGSAction;
 	$errMsg = '';
@@ -361,7 +362,7 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 		//execute query
 		$qryUpdateGSAction->execute(array(':gsRecID' => $gsRecID, ':gameState' => $gameState, ':moveDir' => $moveDir,':movePos' => $movePos, 
 										':nextGameState' => $nextGameState, ':fromGSRecID' => $fromGSRecID,
-										':totalScore' => $totalScore, ':numVisits' => $numVisits));
+										':totalScore' => $totalScore, ':numVisits' => $numVisits, ':winMove' => $winMove));
 		$updateCount = $qryUpdateGSAction->rowcount();
 		if ($updateCount==0){
 			throw new Exception('zero GSActions updated for GSRecID=' . $gsRecID);}
@@ -384,7 +385,7 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 		return $errMsg; }
 }
 //End fnQryUpdateGSAction
-function fnQrySelectGSActionRec($fromGSRecID) {
+function fnQrySelectGSActionRec($gsRecID) {
 	global $qrySelectGSActionRec, $logLevel;
 	fnLogMessageToDb("start fnQrySelectGSActionRec");
 
@@ -392,7 +393,7 @@ function fnQrySelectGSActionRec($fromGSRecID) {
 	$rowCount=0;
 	try {
 		//execute query
-		$qrySelectGSActionRec->execute(array(':gsRecID' => $fromGSRecID));
+		$qrySelectGSActionRec->execute(array(':gsRecID' => $gsRecID));
 		// set the resulting array to associative
 		$result = $qrySelectGSActionRec->setFetchMode(PDO::FETCH_ASSOC); 
 		foreach($qrySelectGSActionRec->fetchAll() as $aGSActionRow) { 
@@ -402,7 +403,7 @@ function fnQrySelectGSActionRec($fromGSRecID) {
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
-			$errMsg = 'fnQrySelectGSActionRec - GSA for ' . $fromGSRecID . ' not found';
+			$errMsg = 'fnQrySelectGSActionRec - GSA for ' . $gsRecID . ' not found';
 			fnLogMessageToDb($errMsg);
 			return $errMsg;
 		}
@@ -414,56 +415,73 @@ function fnQrySelectGSActionRec($fromGSRecID) {
 	}
 }
 //End fnQrySelectGSActionRec
-function fnQrySelectGSActionMoves($gameState, $root = 'N') {
-	global $qrySelectGSActionMoves, $qrySelectGSActionRoot, $logLevel;
-	fnLogMessageToDb('start fnQrySelectGSActionMoves. root=' . $root);
+function fnQrySelectGSActionChildMoves($gameState, $fromGSRecID) {
+	global $qrySelectGSActionMoves, $logLevel;
+	fnLogMessageToDb('start fnQrySelectGSActionChildMoves');
 
 	//execute prepared query
 	$rowCount=0;
 	try {
-		if ($root = 'N') {
-			//execute normal query
-			$qrySelectGSActionMoves -> execute(array(':gameState' => $gameState));
-			// set the resulting array to associative
-			$result = $qrySelectGSActionMoves -> setFetchMode(PDO::FETCH_ASSOC); 
-			foreach($qrySelectGSActionMoves -> fetchAll() as $aGSActionRow) { 
-				if ($aGSActionRow['NumVisits'] > 0) {
-					$aGSActionRow['AvScore'] = $aGSActionRow['TotalScore'] / $aGSActionRow['NumVisits'];
-				}
-				else {
-					$aGSActionRow['AvScore'] = 0;
-				}
-				$gsActionRows[] = $aGSActionRow;
-				$rowCount++; }
+		//execute normal query
+		$qrySelectGSActionMoves -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID));
+		// set the resulting array to associative
+		$result = $qrySelectGSActionMoves -> setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectGSActionMoves -> fetchAll() as $aGSActionRow) { 
+			if ($aGSActionRow['NumVisits'] > 0) {
+				$aGSActionRow['AvScore'] = $aGSActionRow['TotalScore'] / $aGSActionRow['NumVisits'];
+			}
+			else {
+				$aGSActionRow['AvScore'] = 0;
+			}
+			$gsActionRows[] = $aGSActionRow;
+			$rowCount++; 
 		}
-		else {
-			//execute query to find only root record (owner of the move records)
-			$emptyString = '';
-			$qrySelectGSActionRoot->execute(array(':gameState' => $gameState));
-			// set the resulting array to associative
-			$result = $qrySelectGSActionRoot -> setFetchMode(PDO::FETCH_ASSOC); 
-			foreach($qrySelectGSActionRoot -> fetchAll() as $aGSActionRow) { 
-				$gsActionRows[] = $aGSActionRow;
-				$rowCount++; }
-		}
+
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
-			if ($root == 'N') $errMsg = 'fnQrySelectGSActionMoves - GSA move recs for ' . $gameState . ' not found';
-			else $errMsg = 'fnQrySelectGSActionMoves - GSA parent rec for ' . $gameState . ' not found';
+			$errMsg = 'fnQrySelectGSActionChildMoves - GSA move recs for ' . $gameState . ' not found';
 			fnLogMessageToDb($errMsg);
-			//this may not be an error so don't return error message
-			return []; 
+			return $errMsg; 
 		}
 	}
 	catch(PDOException $e) {
-		if ($root = 'N') $errMsg = 'qrySelectGSActionMoves failed: ' . $e->getMessage();
-		else $errMsg = 'qrySelectGSActionRoot failed: ' . $e->getMessage();
+		$errMsg = 'qrySelectGSActionMoves failed: ' . $e->getMessage();
 		fnLogMessageToDb($errMsg);
 		return $errMsg;
 	}
 }
-//End fnQrySelectGSActionMoves
+//End fnQrySelectGSActionChildMoves
+function fnQrySelectGSActionParent($gameState) {
+	global $qrySelectGSActionRoot, $logLevel;
+	fnLogMessageToDb('start fnQrySelectGSActionParent');
+
+	//execute prepared query
+	$rowCount=0;
+	try {
+		//execute query to find parent record (owner of the move records)
+		$emptyString = '';
+		$qrySelectGSActionRoot->execute(array(':gameState' => $gameState));
+		// set the resulting array to associative
+		$result = $qrySelectGSActionRoot -> setFetchMode(PDO::FETCH_ASSOC); 
+		foreach($qrySelectGSActionRoot -> fetchAll() as $aGSActionRow) { 
+			$gsActionRows[] = $aGSActionRow;
+			$rowCount++; }
+		
+		if ($rowCount > 1){
+			$errMsg = 'fnQrySelectGSActionParent error - there should be one parent but ' . $rowCount . ' found';
+			fnLogMessageToDb($errMsg);
+			return $errMsg;
+		}
+		else return $gsActionRows;
+	}
+	catch(PDOException $e) {
+		$errMsg = 'qrySelectGSActionRoot failed: ' . $e->getMessage();
+		fnLogMessageToDb($errMsg);
+		return $errMsg;
+	}
+}
+//End fnQrySelectGSActionParent
 function fnQryAddGCPlayerData2($gcNewPlayerMoves) {
 	fnLogMessageToDb('start fnQryAddGCPlayerData2');
 	global $qryAddGCPlayerData2;
@@ -506,7 +524,7 @@ function fnQryUpdateGCPlayerData2($gcUpdatedPlayerMoves) {
 											':usedTimes' => $gcUpdatedPlayerMoves[$i]['UsedTimes'], ':board' => $gcUpdatedPlayerMoves[$i]['Board']));
 			echo 'update rec, used=' . $gcUpdatedPlayerMoves[$i]['UsedTimes'] . '< board=' . $gcUpdatedPlayerMoves[$i]['Board'] . 
 					'< player=' . $gcUpdatedPlayerMoves[$i]['GCPlayerRef'] . '< moveDir=' . $gcUpdatedPlayerMoves[$i]['MoveDir'] . '< movePos=' . $gcUpdatedPlayerMoves[$i]['MovePos'] .
-					'< score=' . $gcUpdatedPlayerMoves[$i]['QValue'] . '< updateCount=' . $qryUpdateGCPlayerData2->rowcount() . '<br>';
+					'< score=' . $gcUpdatedPlayerMoves[$i]['QValue'] . '< updateCount=' . $qryUpdateGCPlayerData2->rowCount() . '<br>';
 		}
 		catch(PDOException $e) {
 			$errMsg = "qryUpdateGCPlayerData2 failed for GCPlayerRef " . $gcUpdatedPlayerMoves[$i]['GCPlayerRef'] . ' (' . $i . ' of ' . $count1 . ') ' . $e->getMessage();
@@ -751,7 +769,7 @@ function fnQryDeleteGames ($gameRef, $turnCount) {
 	try {
 		//execute query
 		$qryDeleteGames->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
-		$delCount = $qryDeleteGames->rowcount();
+		$delCount = $qryDeleteGames->rowCount();
 		if ($delCount==0){throw new Exception("zero games deleted");}
 		return "";
 		}
@@ -779,7 +797,7 @@ function fnQryUpdateGame ($gameRef, $p1Ref, $p2Ref, $lastPlayerID, $lastUpdated,
 	try {
 		//execute query
 		$qryUpdateGame->execute(array(':gameRef'=>$gameRef,':p1Ref'=>$p1Ref,':p2Ref'=>$p2Ref,':lastPlayerID'=>$lastPlayerID,':lastUpdated'=>$lastUpdated,':winner'=>$winner,':turnCount'=>$turnCount,':turnCountVer'=>$turnCountVer));
-		$updateCount = $qryUpdateGame->rowcount();
+		$updateCount = $qryUpdateGame->rowCount();
 		if ($updateCount==0){throw new Exception("zero games updated for gr=".$gameRef. ' and tcv='.$turnCountVer);}
 		return "";
 		}
@@ -807,7 +825,7 @@ function fnQryUpdateNmxGame ($hashKey, $p1Ref, $p2Ref, $lastPlayer, $areaSize, $
 	try {
 		//execute query
 		$qryUpdateNmxGame->execute(array(':hashKey'=>$hashKey,':p1Ref'=>$p1Ref,':p2Ref'=>$p2Ref,':lastPlayer'=>$lastPlayer,':areaSize'=>$areaSize,':winner'=>$winner,':turnCount'=>$turnCount, ':gameScore'=>$gameScore));
-		$updateCount = $qryUpdateNmxGame->rowcount();
+		$updateCount = $qryUpdateNmxGame->rowCount();
 		if ($updateCount==0){throw new Exception("zero nmx games updated");}
 		return "";
 		}
@@ -835,7 +853,7 @@ function fnQryUpdateStack($stackNum, $stackHeight, $top, $counters, $stackRecID,
 		//execute query
 		$qryUpdateStack->execute(array(':stackNum'=>$stackNum,':stackHeight'=>$stackHeight,':top'=>$top,':counters'=>$counters,':stackRecID'=>$stackRecID, 
 											':turnCount'=>$turnCount));
-		$updateCount = $qryUpdateStack->rowcount();
+		$updateCount = $qryUpdateStack->rowCount();
 		if ($updateCount==0){throw new Exception("zero stacks updated - ID=" . $stackRecID . " SN=" . $stackNum . " SH=" . $stackHeight . " TOP=" . $top . " TC=" . $turnCount);}
 		return "";
 		}
@@ -862,7 +880,7 @@ function fnQryUpdateNmxStack($stackNum, $stackHeight, $top, $stackRecID, $turnCo
 	try {
 		//execute query
 		$qryUpdateNmxStack->execute(array(':stackNum'=>$stackNum, ':stackHeight'=>$stackHeight, ':top'=>$top, ':stackRecID' => $stackRecID, ':turnCount'=>$turnCount ));
-		$updateCount = $qryUpdateNmxStack->rowcount();
+		$updateCount = $qryUpdateNmxStack->rowCount();
 		if ($updateCount==0){throw new Exception("zero nmx stacks deleted");}
 		return "";
 		}
@@ -926,7 +944,7 @@ function fnQryDeleteStacksForManyTurns ($gameRef, $turnCount) {
 	try {
 		//execute query
 		$qryDeleteStacksForManyTurns->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
-		$delCount = $qryDeleteStacksForManyTurns->rowcount();
+		$delCount = $qryDeleteStacksForManyTurns->rowCount();
 		if ($delCount==0){throw new Exception("zero stacks  deleted");}
 		return "";
 		}
@@ -953,7 +971,7 @@ function fnQryDeleteStacksForOneTurn ($gameRef, $turnCount) {
 	try {
 		//execute query
 		$qryDeleteStacksForOneTurn->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
-		$delCount = $qryDeleteStacksForOneTurn->rowcount();
+		$delCount = $qryDeleteStacksForOneTurn->rowCount();
 		if ($delCount==0){throw new Exception("zero stacks deleted");}
 		return "";
 		}
@@ -1210,7 +1228,7 @@ function fnQryUpdateCounters ($gameRef, $stackNum, $playerRef, $counterHeight, $
 	try {
 		//execute query
 		$qryUpdateCounter->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':playerRef'=>$playerRef, ':counterHeight'=>$counterHeight, ':counterRecID'=>$counterRecID));
-		$updateCount = $qryUpdateCounter->rowcount();
+		$updateCount = $qryUpdateCounter->rowCount();
 		if ($updateCount==0){throw new Exception("zero counters updated");}
 		return "";
 		}
@@ -1237,7 +1255,7 @@ function fnQryUpdateNmxCounters ($stackNum, $playerRef, $counterHeight, $counter
 	try {
 		//execute query
 		$qryUpdateNmxCounter->execute(array(':stackNum'=>$stackNum, ':playerRef'=>$playerRef, ':counterHeight'=>$counterHeight, ':counterRecID'=>$counterRecID, ':turnCount'=>$turnCount));
-		$updateCount = $qryUpdateNmxCounter->rowcount();
+		$updateCount = $qryUpdateNmxCounter->rowCount();
 		if ($updateCount==0){throw new Exception("zero nmx counters updated");}
 		return "";
 		}
@@ -1264,7 +1282,7 @@ function fnQryDeleteCountersForOneTurn ($gameRef, $turnCount) {
 	try {
 		//execute query
 		$qryDeleteCountersForOneTurn->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
-		$delCount = $qryDeleteCountersForOneTurn->rowcount();
+		$delCount = $qryDeleteCountersForOneTurn->rowCount();
 		if ($delCount==0){throw new Exception("zero counters deleted");}
 		return "";
 		}
@@ -1291,7 +1309,7 @@ function fnQryDeleteCountersForManyTurns ($gameRef, $turnCount) {
 	try {
 		//execute query
 		$qryDeleteCountersForManyTurns->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
-		$delCount = $qryDeleteCountersForManyTurns->rowcount();
+		$delCount = $qryDeleteCountersForManyTurns->rowCount();
 		if ($delCount==0){throw new Exception("zero counters deleted");}
 		return "";
 		}
