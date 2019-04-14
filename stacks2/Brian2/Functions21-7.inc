@@ -115,6 +115,8 @@ Contains code (fnSimulateMove) to simulate a game without affecting the real gam
 Contains code (fnRollout) for playing a game to the end without updaing the database.
 Contains code (fnSetUpGSARecs) for setting up new GSA records. 
 Contains code (fnBackPropagation) for updating the value of GSA action records
+----------
+Tested fnInitialiseXRows
 */
 
 //Global variables for database queries
@@ -398,7 +400,7 @@ function fnInitialiseXRows($gameState, &$xGameRow, &$xStackRows){
 			//if stepNum is zero then the stack is in the P1 reserve
 			else if ($stepNum == 0) $xStackRows[$stackNum]['Counters'] = str_repeat('1', $tempGSHeight);
 			//assume stack is in the playing area and only the identify of the top counter is known
-			else $xStackRows[$stackNum]['Counters'] = str_repeat('x', $tempGSHeight - 1) . $tempGSOwner;
+			else $xStackRows[$stackNum]['Counters'] = $tempGSOwner . str_repeat('x', $tempGSHeight - 1) ;
 		}
 		if ($errCode == '') {
 			//the true AreaSize is known so update the counters in the P2 reserve stacks
@@ -700,7 +702,7 @@ function fnSelection($gsActionRows, $gsActionParent){
 			$bestIndexes = [];
 			$maxScore = 9999;
 			//Loop through all records calculating UCB1 score
-			for ($i=0; $i < $gsActionRowsCount, $i++) {
+			for ($i=0; $i < $gsActionRowsCount; $i++) {
 				//if $gsActionRow['NumVisits'] = 0 then score = big number
 				if ($gsActionRows[$i]['NumVisits'] == 0) $ucb1Score = $maxScore;
 				elseif ($gsActionRows[$i]['WinMove'] == 'Y') $ucb1Score = $maxScore + 1;
@@ -738,12 +740,12 @@ function fnSelection($gsActionRows, $gsActionParent){
 			Call fnInitialiseXRows to create dummy gameRows and stackRows based on NextGameState of chosen GSA
 			Call fnGetMoves to find all possible moves 
 			*/
-			xGameRow = [];
-			xStackRows = [];
+			$xGameRow = [];
+			$xStackRows = [];
 			$winMove = 'N';
 			//fnInitialiseXRows will process game state and put equivalent data into xGameRow and xStackRows
 			fnInitialiseXRows($gsActionRows[$bestIndexes[0]]['NextGameState'], $xGameRow, $xStackRows);
-			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows)
+			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
 			if (is_string($fnResp)) {
 				$errCode = 'SEL-2';
 				$errMsg = $fnResp;
@@ -854,7 +856,7 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 		//fnInitialiseXRows will process game state and put equivalent data into xGameRow and xStackRows
 		fnInitialiseXRows($gsActionRows['NextGameState'], $xGameRow, $xStackRows);
 		//get moves list
-		$fnResp = fnGetMoves(0, $xGameRow, $xStackRows)
+		$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
 		if (is_string($fnResp)) {
 			$errCode = 'EXP-1';
 			$errMsg = $fnResp;
@@ -911,7 +913,7 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 			} //end of foreach loop
 			//e. Select one of the new GSA moves at random and return it's record ID
 			if (count($newParentGSRecIDs) > 0) {
-				if (shuffle($newParentGSRecIDs) $fnResp = $newParentGSRecIDs[0];
+				if (shuffle($newParentGSRecIDs)) $fnResp = $newParentGSRecIDs[0];
 				else {
 					//error has occurred in shuffle routine
 					$errCode = 'EXP-5';
@@ -920,7 +922,7 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 				}
 			}
 			else {
-				if (shuffle($parentGSRecIDs) $fnResp = $parentGSRecIDs[0];
+				if (shuffle($parentGSRecIDs)) $fnResp = $parentGSRecIDs[0];
 				else {
 					//error has occurred in shuffle routine
 					$errCode = 'EXP-6';
@@ -1139,7 +1141,7 @@ function fnRunGCP3 ($playerName, $gameRef){
 
 						//d. If current GSA rec is not a win or lose ($winMove not 'Y' or 'L') then 
 						$fnResp = fnQrySelectGSActionRec($currentGSActionRecID);
-						if (is_String($fnResp) {
+						if (is_String($fnResp)) {
 							$errCode = 'GC3-21';
 							$errMsg = $fnResp;
 							fnLogMessageToDb($errCode.$errMsg);
@@ -3421,14 +3423,22 @@ function fnProcessInput($callString) {
 				$xGameRow = [];
 				$xStackRows = [];
 				fnRollout($gameState, $xGameRow, $xStackRows);
-				*/
 				
 				//fnRunGCP3
 				if (array_key_exists('GAMEREF',$refs) == True) {
 					$fnResp = fnRunGCP3($refs['PLAYERNAME'], $refs['GAMEREF']); }
 				else {
 					$fnResp = fnRunGCP3($refs['PLAYERNAME'], 0); }				
-
+				*/
+				//fnInitialiseXRows($gameState, &$xGameRow, &$xStackRows)
+				$gameState = '800x1x5x801x1x4x802x0x0x803x1x1x804x0x0x805x2x2x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x1x3x815x0x0x816x2x5';
+				$xGameRow = [];
+				$xStackRows = [];
+				fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+				echo 'test fnInitialiseXRows';
+				print_r($xGameRow);
+				print_r($xStackRows);
+				
 				break;
 
 			case 'COPY':

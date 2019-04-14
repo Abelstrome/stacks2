@@ -210,7 +210,7 @@ function fnDbConnect() {
 		
 		//Add GSA
 		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, ';
-		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove'
+		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove';
 		$qryAddGSAction = $conn->prepare($query);
 		
 		//Update GSA
