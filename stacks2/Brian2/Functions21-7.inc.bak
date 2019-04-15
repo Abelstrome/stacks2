@@ -121,6 +121,7 @@ Contains code (fnExpansion) to add new parent and child records for each possibl
 Tested fnInitialiseXRows
 Tested fnSetUpGSARecs
 Tested fnQrySelectGSActionChildMoves
+Testing fnExpansion - need to check the results
 */
 
 //Global variables for database queries
@@ -853,21 +854,29 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 		e. Select one of the new GSA moves at random and return it's record ID
 	*/
 	
-	//3. Get current GSA rec
-	$fnResp = fnQrySelectGSActionRec($currentGSActionRecID);
-	if (is_String($fnResp)) {
+	//3. Find current GSA rec in gsActionRows
+	$gsActionRowsPtr = -1;
+	$gsActionRowsCount = count($gsActionRows);
+	for ($i=0; $i < $gsActionRowsCount; $i++) {
+		if ($gsActionRows[$i]['GSRecID'] == $currentGSActionRecID) {
+			$gsActionRowsPtr = $i;
+			break;
+		}
+	}
+	if ($gsActionRowsPtr < 0) {
 		$errCode = 'EXP-7';
-		$errMsg = $fnResp;
+		$errMsg = '$fnExpansion - currentGSActionRecID ' . $currentGSActionRecID . ' not found in gsActionRows ' . print_r($gsActionRows, True);
 		fnLogMessageToDb($errCode.$errMsg);
 	}
 	else {
 		//3. If this is first time record has been processed ($gsActionRow['NumVisits'] = 0) then return record ID of current record
-		$gsActionRows = $fnResp;
-		if($gsActionRows[0]['NumVisits'] == 0) $fnResp = $currentGSActionRecID;
+		echo '<br>'.'pointer ' . $gsActionRowsPtr . ' rec ';
+		print_r($gsActionRows);
+		if($gsActionRows[$gsActionRowsPtr]['NumVisits'] == 0) $fnResp = $currentGSActionRecID;
 		else {
 			//a. Find all possible moves on NextGameState (This will be a list of moves for P2)
 			//fnInitialiseXRows will process game state and put equivalent data into xGameRow and xStackRows
-			fnInitialiseXRows($gsActionRows[0]['NextGameState'], $xGameRow, $xStackRows);
+			fnInitialiseXRows($gsActionRows[$gsActionRowsPtr]['NextGameState'], $xGameRow, $xStackRows);
 			//get moves list
 			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
 			if (is_string($fnResp)) {
@@ -882,7 +891,7 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 					//b. Simulate random move on NextGameState to produce a new GameState
 					$xGameRow = [];
 					$xStackRows = [];
-					$fnResp = fnSimulateMove($gsActionRows[0]['NextGameState'], $xGameRow, $xStackRows, $aMove[1], $aMove[2]);
+					$fnResp = fnSimulateMove($gsActionRows[$gsActionRowsPtr]['NextGameState'], $xGameRow, $xStackRows, $aMove[1], $aMove[2]);
 					// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
 					// Error codes: SMO-3, SMO-7
 					if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
