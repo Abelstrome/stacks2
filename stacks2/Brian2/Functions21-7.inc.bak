@@ -121,7 +121,7 @@ Contains code (fnExpansion) to add new parent and child records for each possibl
 Tested fnInitialiseXRows
 Tested fnSetUpGSARecs
 Tested fnQrySelectGSActionChildMoves
-Testing fnExpansion - need to check the results
+Tested fnExpansion
 */
 
 //Global variables for database queries
@@ -149,97 +149,107 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 	fnLogMessageToDb('start fnRollout');
 
 	//if xGameRow is empty then create new data for xGameRow and xStackRows
-	if (count($xGameRow) == 0) fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
-
-	//echo 'startup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
-
-	$minMoves = 2 ;
-	$errCode = '';
-	$loopCount=0;
-
-	set_time_limit(7000);
-	//echo 'start time ' . date("Y-m-d H:i:s") . '<br>';
-	while ($errCode == '' and $loopCount < 1300){
-
-		//find next move for next player
-		$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
-		if (is_string($fnResp)) {
-			$errCode = "ROL-1";
+	if (count($xGameRow) == 0) {
+		$fnResp = fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+		if ($fnResp != '') {
+			$errCode = 'ROL-11';
 			$errMsg = $fnResp;
 			fnLogMessageToDb($errCode.$errMsg);
 		}
-		else {
-			$movesList = $fnResp;
-			$moveCount = count($movesList);
-			if ($moveCount > 0) {
-				//Player has moves available
-				//When simulating games for Monte Carlo Tree Search when a player has very few moves available the game may be counted as lost
-				if ($moveCount <= $minMoves) {
-					if ($gameRow['P1RecID'] == $gameRow['LastPlayerID']) {
-						$player1or2 = 2;
-						$errCode = 'ROL-2';}
-					else {
-						$player1or2 = 1;
-						$errCode = 'ROL-3';}
-					$errMsg = 'P' . $player1or2 . ' has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
-					fnLogMessageToDb($errCode.$errMsg);
-				}
-				else {
-					//choose the next move at random
-					if (shuffle($movesList)) {
-						$errCode2 = 'ROL-9';
-						$errMsg2 = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
-						fnLogMessageToDb($errCode2.$errMsg2);
-						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
-						// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
-						// Error codes: SMO-3, SMO-7
-						if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
-							//fnSimulateMove returned an error code
-							$errCode = 'ROL-5';
-							$errMsg = $fnResp;
-							fnLogMessageToDb($errCode.$errMsg);
-						}
-						elseif ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
-						//elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
-							// P2 has won
-							$errCode = 'ROL-6';
-							$errMsg = 'P2 has won';
-							fnLogMessageToDb($errCode.$errMsg);
-						}
-						elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
-						//elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
-							// P1 has won
-							$errCode = 'ROL-7';
-							$errMsg = 'P1 has won';
-							fnLogMessageToDb($errCode.$errMsg);
-						}
-						elseif ($fnResp['errCode'] != '') {
-							//unknown response code
-							$errCode = 'ROL-8';
-							$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
-							fnLogMessageToDb($errCode.$errMsg);
-						}
-					}
-					else{
-						//error has occurred in shuffle routine
-						$errCode = 'ROL-4';
-						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
+	}
+
+	if ($errCode == '') {
+		//echo 'startup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
+		
+		$minMoves = 2 ;
+		$errCode = '';
+		$loopCount=0;
+
+		set_time_limit(7000);
+		//echo 'start time ' . date("Y-m-d H:i:s") . '<br>';
+		while ($errCode == '' and $loopCount < 1300){
+
+			//find next move for next player
+			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
+			if (is_string($fnResp)) {
+				$errCode = "ROL-1";
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+			else {
+				$movesList = $fnResp;
+				$moveCount = count($movesList);
+				if ($moveCount > 0) {
+					//Player has moves available
+					//When simulating games for Monte Carlo Tree Search when a player has very few moves available the game may be counted as lost
+					if ($moveCount <= $minMoves) {
+						if ($gameRow['P1RecID'] == $gameRow['LastPlayerID']) {
+							$player1or2 = 2;
+							$errCode = 'ROL-2';}
+						else {
+							$player1or2 = 1;
+							$errCode = 'ROL-3';}
+						$errMsg = 'P' . $player1or2 . ' has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
 						fnLogMessageToDb($errCode.$errMsg);
+					}
+					else {
+						//choose the next move at random
+						if (shuffle($movesList)) {
+							$errCode2 = 'ROL-9';
+							$errMsg2 = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
+							fnLogMessageToDb($errCode2.$errMsg2);
+							$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
+							// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+							// Error codes: SMO-3, SMO-7
+							if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+								//fnSimulateMove returned an error code
+								$errCode = 'ROL-5';
+								$errMsg = $fnResp;
+								fnLogMessageToDb($errCode.$errMsg);
+							}
+							elseif ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+							//elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
+								// P2 has won
+								$errCode = 'ROL-6';
+								$errMsg = 'P2 has won';
+								fnLogMessageToDb($errCode.$errMsg);
+							}
+							elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+							//elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
+								// P1 has won
+								$errCode = 'ROL-7';
+								$errMsg = 'P1 has won';
+								fnLogMessageToDb($errCode.$errMsg);
+							}
+							elseif ($fnResp['errCode'] != '') {
+								//unknown response code
+								$errCode = 'ROL-8';
+								$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+								fnLogMessageToDb($errCode.$errMsg);
+							}
+						}
+						else{
+							//error has occurred in shuffle routine
+							$errCode = 'ROL-4';
+							$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
+							fnLogMessageToDb($errCode.$errMsg);
+						}
 					}
 				}
 			}
+
+			$loopCount++;
 		}
-
-		$loopCount++;
+		//echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
 	}
-	//echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
-
+		
 	if ($errCode == '') {
 		//game has reached max number of moves so effectively a draw
 		$errCode = 'ROL-10';
 		$errMsg = 'Game drawn';
 	}
-	return array("errCode" => $errCode, "errMsg" => $errMsg) ;
+	fnLogMessageToDb('exiting fnRollout');
+	return array('errCode' => $errCode, 'errMsg' => $errMsg) ;
 }
 //End fnRollout
 function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
@@ -344,16 +354,28 @@ function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
 	} 
 	else $conn->commit();
 
+	fnLogMessageToDb('exiting fnBackPropagation');
 	return $errCode.$errMsg;
 }
 //End of fnBackPropagation
-function fnInitialiseXRows($gameState, &$xGameRow, &$xStackRows){
+function fnInitialiseXRows($gameState, &$xGameRow, &$xStackRows, $player1or2 = 2){
 	//process game state (encoded board) and create xGameRow and xStackRows records
 	//update xGameRow and xStackRows in situ
 	//return error code and message or nothing if all ok
 	fnLogMessageToDb('start fnInitialiseXRows');
-	$errCode = '';
-	if (count($xGameRow) == 0) {
+	$errCode = ''; 
+	$errMsg = '';
+	if (count($xGameRow) > 0) {
+		$errCode = 'IXR-1';
+		$errMsg = 'xGameRow not empty';
+		fnLogMessageToDb($errCode.$errMsg);
+	} 
+	else if (count($xStackRows) > 0) {
+		$errCode = 'IXR-2';
+		$errMsg = 'xStackRows not empty';
+		fnLogMessageToDb($errCode.$errMsg);
+	} 
+	else {
 		//populate xGameRow with default values
 		//$xGameRow['GameRecID'] = -1;
 		//$xGameRow['GameRef'] = -1;
@@ -367,55 +389,60 @@ function fnInitialiseXRows($gameState, &$xGameRow, &$xStackRows){
 		$tempGS = $gameState . 'x';
 		if (substr_count($tempGS, 'x') % 3 > 0) {
 			//the number of items should be a multiple of 3 (position, owner, height)
-			$errCode = 'IRO-1';
-			$errMsg = ('invalid gameState:' . $gameState . '<');
+			$errCode = 'IXR-3';
+			$errMsg = 'invalid gameState:' . $gameState . '<';
 			fnLogMessageToDb($errCode.$errMsg);
 		}
-		$startPos = 0;
-		while (strpos($tempGS, 'x', $startPos) and $errCode == '') {
-			//get next set of position, owner, height details
-			$endPos = strpos($tempGS, 'x', $startPos);
-			$tempGSPos = substr($tempGS, $startPos, $endPos - $startPos);
-			$startPos = $endPos + 1;
-			$endPos = strpos($tempGS, 'x', $startPos);
-			$tempGSOwner = substr($tempGS, $startPos, $endPos - $startPos);
-			$startPos = $endPos + 1;
-			$endPos = strpos($tempGS, 'x', $startPos);
-			$tempGSHeight = intval(substr($tempGS, $startPos, $endPos - $startPos));
-			$startPos = $endPos + 1;
+		else {
+			$startPos = 0;
+			while (strpos($tempGS, 'x', $startPos)) {
+				//get next set of position, owner, height details
+				$endPos = strpos($tempGS, 'x', $startPos);
+				$tempGSPos = substr($tempGS, $startPos, $endPos - $startPos);
+				$startPos = $endPos + 1;
+				$endPos = strpos($tempGS, 'x', $startPos);
+				$tempGSOwner = substr($tempGS, $startPos, $endPos - $startPos);
+				$startPos = $endPos + 1;
+				$endPos = strpos($tempGS, 'x', $startPos);
+				$tempGSHeight = intval(substr($tempGS, $startPos, $endPos - $startPos));
+				$startPos = $endPos + 1;
 
-			//extract trackNum and stepNum from position. (track is second digit, step is 3 digit onwards)
-			$trackNum = intval(substr($tempGSPos, 1, 1));
-			$stepNum = intval(substr($tempGSPos, 2, strlen($tempGSPos)-2));
+				//extract trackNum and stepNum from position. (track is second digit, step is 3 digit onwards)
+				$trackNum = intval(substr($tempGSPos, 1, 1));
+				$stepNum = intval(substr($tempGSPos, 2, strlen($tempGSPos)-2));
 
-			//update AreaWidth and AreaSize
-			if ($trackNum + 1 > $xGameRow['AreaWidth']) $xGameRow['AreaWidth'] = $trackNum + 1;
-			if ($stepNum - 1 > $xGameRow['AreaSize'] ) $xGameRow['AreaSize']  = $stepNum - 1;
+				//update AreaWidth and AreaSize
+				if ($trackNum + 1 > $xGameRow['AreaWidth']) $xGameRow['AreaWidth'] = strval($trackNum + 1);
+				if ($stepNum - 1 > $xGameRow['AreaSize'] ) $xGameRow['AreaSize']  = strval($stepNum - 1);
 
-			//populate xStackRows
-			$stackNum = intval($tempGSPos);
-			//$xStackRows[$stackNum]['StackRecID'] = -1;
-			//$xStackRows[$stackNum]['GameRef'] = $xGameRow['GameRef'];
-			$xStackRows[$stackNum]['StackNum'] = $stackNum;
-			//$xStackRows[$stackNum]['TurnCount'] = 0;
-			$xStackRows[$stackNum]['OwnerPNum'] = intval($tempGSOwner);
-			$xStackRows[$stackNum]['StackHeight'] = $tempGSHeight;
-			//if the stack is empty then Counters is blank
-			if ($tempGSHeight == 0) $xStackRows[$stackNum]['Counters'] = '';
-			//if stepNum is zero then the stack is in the P1 reserve
-			else if ($stepNum == 0) $xStackRows[$stackNum]['Counters'] = str_repeat('1', $tempGSHeight);
-			//assume stack is in the playing area and only the identify of the top counter is known
-			else $xStackRows[$stackNum]['Counters'] = $tempGSOwner . str_repeat('x', $tempGSHeight - 1) ;
-		}
-		if ($errCode == '') {
+				//populate xStackRows
+				$stackNum = intval($tempGSPos);
+				//$xStackRows[$stackNum]['StackRecID'] = -1;
+				//$xStackRows[$stackNum]['GameRef'] = $xGameRow['GameRef'];
+				$xStackRows[$stackNum]['StackNum'] = $stackNum;
+				//$xStackRows[$stackNum]['TurnCount'] = 0;
+				$xStackRows[$stackNum]['OwnerPNum'] = intval($tempGSOwner);
+				$xStackRows[$stackNum]['StackHeight'] = strval($tempGSHeight);
+				//if the stack is empty then Counters is blank
+				if ($tempGSHeight == 0) $xStackRows[$stackNum]['Counters'] = '';
+				//if stepNum is zero then the stack is in the P1 reserve
+				else if ($stepNum == 0) $xStackRows[$stackNum]['Counters'] = str_repeat('1', $tempGSHeight);
+				//assume stack is in the playing area and only the identify of the top counter is known
+				else $xStackRows[$stackNum]['Counters'] = $tempGSOwner . str_repeat('x', $tempGSHeight - 1) ;
+			}
+
 			//the true AreaSize is known so update the counters in the P2 reserve stacks
 			for ($trackIx = 0; $trackIx < $xGameRow['AreaWidth']; $trackIx++) {
 				$stackNum = intval('8' . $trackIx . $xGameRow['AreaSize'] + 1);
 				if ($xStackRows[$stackNum]['StackHeight'] > 0) $xStackRows[$stackNum]['Counters'] = str_repeat('2', $xStackRows[$stackNum]['StackHeight']);
 			}
-			$xGameRow['LastPlayerID'] = 2;
+			
+			$xGameRow['LastPlayerID'] = $player1or2;
 		}
 	}
+	fnLogMessageToDb('exiting fnInitialiseXRows');
+	return $errCode.$errMsg;
+	
 }
 //End fnInitialiseXRows
 function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos) {
@@ -435,8 +462,14 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 	//echo 'startup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
 
 	//if xGameRow is empty then create new data for xGameRow and xStackRows
-	if (count($xGameRow) == 0) fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
-
+	if (count($xGameRow) == 0) {
+		$fnResp = fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+		if ($fnResp != '') {
+			$errCode = 'SMO-1';
+			$errMsg = $fnResp;
+			fnLogMessageToDb($errCode.$errMsg);
+		}
+	}
 	//only continue if there are no errors
 	//calculate track and stack numbers for the move
 	if ($errCode == '') {
@@ -668,7 +701,7 @@ function fnSimulateMove($gameState, &$xGameRow, &$xStackRows, $moveDir, $movePos
 	}
 
 	//echo 'endup'.'<br>'.'xGameRow = '; print_r($xGameRow); echo '<br>'.'xStackRows = '; print_r($xStackRows); echo '<br>';
-
+	fnLogMessageToDb('exiting fnSimulateMove');
 	return array("errCode" => $errCode, "errMsg" => $errMsg) ;
 }
 //End of fnSimulateMove
@@ -749,53 +782,60 @@ function fnSelection($gsActionRows, $gsActionParent){
 			$xStackRows = [];
 			$winMove = 'N';
 			//fnInitialiseXRows will process game state and put equivalent data into xGameRow and xStackRows
-			fnInitialiseXRows($gsActionRows[$bestIndexes[0]]['NextGameState'], $xGameRow, $xStackRows);
-			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
-			if (is_string($fnResp)) {
-				$errCode = 'SEL-2';
+			$fnResp = fnInitialiseXRows($gsActionRows[$bestIndexes[0]]['NextGameState'], $xGameRow, $xStackRows);
+			if ($fnResp != '') {
+				$errCode = 'SEL-10';
 				$errMsg = $fnResp;
-				fnLogMessageToDb($errCode.$errMsg); }
+				fnLogMessageToDb($errCode.$errMsg); 
+			}
 			else {
-				//8. Simulate random move on NextGameState to produce a new GameState
-				$movesList = $fnResp;
-				if (shuffle($movesList)) {
-					$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
-					// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
-					// Error codes: SMO-3, SMO-7
-					if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
-						//fnSimulateMove returned an error code
-						$errCode = 'SEL-4';
-						$errMsg = $fnResp;
-						fnLogMessageToDb($errCode.$errMsg);
-					}
-					elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
-					//elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
-						// P2 has won
-						$winMove = 'L';
-						$errCode2 = 'SEL-6';
-						$errMsg = 'P2 has won';
-						fnLogMessageToDb($errCode2.$errMsg);
-					}
-					elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
-					//elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
-						// P1 has won
-						$winMove = 'Y';
-						$errCode2 = 'SEL-7';
-						$errMsg = 'P1 has won';
-						fnLogMessageToDb($errCode2.$errMsg);
-					}
-					elseif ($fnResp['errCode'] != '') {
-						//unknown response code
-						$errCode = 'SEL-5';
-						$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
-						fnLogMessageToDb($errCode.$errMsg);
-					}
-				}
+				$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
+				if (is_string($fnResp)) {
+					$errCode = 'SEL-2';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg); }
 				else {
-					//error in shuffle routine
-					$errCode = 'SEL-3';
-					$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
-					fnLogMessageToDb($errCode.$errMsg);
+					//8. Simulate random move on NextGameState to produce a new GameState
+					$movesList = $fnResp;
+					if (shuffle($movesList)) {
+						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
+						// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+						// Error codes: SMO-3, SMO-7
+						if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+							//fnSimulateMove returned an error code
+							$errCode = 'SEL-4';
+							$errMsg = $fnResp;
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+						elseif  ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+						//elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
+							// P2 has won
+							$winMove = 'L';
+							$errCode2 = 'SEL-6';
+							$errMsg = 'P2 has won';
+							fnLogMessageToDb($errCode2.$errMsg);
+						}
+						elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
+						//elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
+							// P1 has won
+							$winMove = 'Y';
+							$errCode2 = 'SEL-7';
+							$errMsg = 'P1 has won';
+							fnLogMessageToDb($errCode2.$errMsg);
+						}
+						elseif ($fnResp['errCode'] != '') {
+							//unknown response code
+							$errCode = 'SEL-5';
+							$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+							fnLogMessageToDb($errCode.$errMsg);
+						}
+					}
+					else {
+						//error in shuffle routine
+						$errCode = 'SEL-3';
+						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
+						fnLogMessageToDb($errCode.$errMsg);
+					}
 				}
 			}
 		}
@@ -833,6 +873,7 @@ function fnSelection($gsActionRows, $gsActionParent){
 		}
 	} //end of while loop
 
+	fnLogMessageToDb('exiting fnSelection');
 	if ($errCode == '') return $gsRecIDs;
 	else return $errCode.$errMsg;
 	
@@ -870,93 +911,106 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 	}
 	else {
 		//3. If this is first time record has been processed ($gsActionRow['NumVisits'] = 0) then return record ID of current record
-		echo '<br>'.'pointer ' . $gsActionRowsPtr . ' rec ';
-		print_r($gsActionRows);
 		if($gsActionRows[$gsActionRowsPtr]['NumVisits'] == 0) $fnResp = $currentGSActionRecID;
 		else {
 			//a. Find all possible moves on NextGameState (This will be a list of moves for P2)
 			//fnInitialiseXRows will process game state and put equivalent data into xGameRow and xStackRows
-			fnInitialiseXRows($gsActionRows[$gsActionRowsPtr]['NextGameState'], $xGameRow, $xStackRows);
-			//get moves list
-			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
-			if (is_string($fnResp)) {
-				$errCode = 'EXP-1';
+			//set last player to P1 so that game rec is set for P2 to move
+			$fnResp = fnInitialiseXRows($gsActionRows[$gsActionRowsPtr]['NextGameState'], $xGameRow, $xStackRows, 1);
+			if ($fnResp != '') {
+				$errCode = 'EXP-8';
 				$errMsg = $fnResp;
-				fnLogMessageToDb($errCode.$errMsg); }
+				fnLogMessageToDb($errCode.$errMsg);
+			}
 			else {
-				$parentGSRecIDs = [];
-				$newParentGSRecIDs = [];
-				$movesList = $fnResp;
-				foreach ($movesList as $aMove){
-					//b. Simulate random move on NextGameState to produce a new GameState
-					$xGameRow = [];
-					$xStackRows = [];
-					$fnResp = fnSimulateMove($gsActionRows[$gsActionRowsPtr]['NextGameState'], $xGameRow, $xStackRows, $aMove[1], $aMove[2]);
-					// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
-					// Error codes: SMO-3, SMO-7
-					if ($fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
-						//fnSimulateMove returned an error code
-						$errCode = 'EXP-2';
-						$errMsg = $fnResp;
-						fnLogMessageToDb($errCode.$errMsg);
-						break;
-					}
-					else {
-						//get new game state
-						$newGameState = fnEncodeBoard($xStackRows, $xGameRow);
-						//c. Check if GSA parent exists for the new GameState
-						$fnResp = fnQrySelectGSActionParent($newGameState);
-						if (is_string($fnResp)){
-							//error has occurred
-							$errCode = 'EXP-3';
+				//get moves list
+				$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
+				if (is_string($fnResp)) {
+					$errCode = 'EXP-1';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg); }
+				else {
+					$parentGSRecIDs = [];
+					$newParentGSRecIDs = [];
+					$movesList = $fnResp;
+					//save xGameRow and xStackRows
+					$savedxGameRow = $xGameRow;
+					$savedxStackRows = $xStackRows;
+					foreach ($movesList as $aMove){
+						//b. Simulate random move on NextGameState to produce a new GameState
+						$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $aMove[1], $aMove[2]);
+						// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
+						// Error codes: SMO-3, SMO-7
+						if ($fnResp['errCode'] == 'SMO-1' or $fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
+							//fnSimulateMove returned an error code
+							$errCode = 'EXP-2';
 							$errMsg = $fnResp;
 							fnLogMessageToDb($errCode.$errMsg);
 							break;
 						}
 						else {
-							$gsActionParent = $fnResp;
-							if (count($gsActionParent) == 0) {
-								/*Parent GSA record not found so ...
-								d. Create a new GSA parent and child recs by calling Setup(new GameState)
-								*/
-								$fnResp = fnSetUpGSARecs($newGameState, $xGameRow, $xStackRows);
-								if (is_String($fnResp)){
-									$errCode = 'EXP-4';
-									$errMsg = $fnResp;
-									fnLogMessageToDb($errCode.$errMsg);
-									break;
-								}
-								$gsActionParent = $fnResp;
-								$newParentGSRecIDs[] = $gsActionParent[0]['GSRecID'];
+							//get new game state
+							$newGameState = fnEncodeBoard($xStackRows, $xGameRow);
+							//c. Check if GSA parent exists for the new GameState
+							$fnResp = fnQrySelectGSActionParent($newGameState);
+							if (is_string($fnResp)){
+								//error has occurred
+								$errCode = 'EXP-3';
+								$errMsg = $fnResp;
+								fnLogMessageToDb($errCode.$errMsg);
+								break;
 							}
-							else $parentGSRecIDs[] = $gsActionParent[0]['GSRecID'];
+							else {
+								$gsActionParent = $fnResp;
+								if (count($gsActionParent) == 0) {
+									/*Parent GSA record not found so ...
+									d. Create a new GSA parent and child recs by calling Setup(new GameState)
+									*/
+									$fnResp = fnSetUpGSARecs($newGameState, $xGameRow, $xStackRows);
+									if (is_String($fnResp)){
+										$errCode = 'EXP-4';
+										$errMsg = $fnResp;
+										fnLogMessageToDb($errCode.$errMsg);
+										break;
+									}
+									$gsActionParent = $fnResp;
+									$newParentGSRecIDs[] = $gsActionParent[0]['GSRecID'];
+								}
+								else $parentGSRecIDs[] = $gsActionParent[0]['GSRecID'];
+							}
+						}
+						//reset xGameRow and xStackRows
+						$xGameRow = $savedxGameRow;
+						$xStackRows = $savedxStackRows;
+					} //end of foreach loop
+					//e. Select one of the new GSA moves at random and return it's record ID
+					if (count($newParentGSRecIDs) > 0) {
+						fnLogMessageToDb('fnExpansion - ' . count($newParentGSRecIDs) . ' new parent GSA recs');
+						if (shuffle($newParentGSRecIDs)) $fnResp = $newParentGSRecIDs[0];
+						else {
+							//error has occurred in shuffle routine
+							$errCode = 'EXP-5';
+							$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($newParentGSRecIDs, True);
+							fnLogMessageToDb($errCode.$errMsg);
 						}
 					}
-				} //end of foreach loop
-				//e. Select one of the new GSA moves at random and return it's record ID
-				if (count($newParentGSRecIDs) > 0) {
-					if (shuffle($newParentGSRecIDs)) $fnResp = $newParentGSRecIDs[0];
 					else {
-						//error has occurred in shuffle routine
-						$errCode = 'EXP-5';
-						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($newParentGSRecIDs, True);
-						fnLogMessageToDb($errCode.$errMsg);
-					}
-				}
-				else {
-					//there are no new GSA moves so use one of the pre-existing ones
-					if (shuffle($parentGSRecIDs)) $fnResp = $parentGSRecIDs[0];
-					else {
-						//error has occurred in shuffle routine
-						$errCode = 'EXP-6';
-						$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($parentGSRecIDs, True);
-						fnLogMessageToDb($errCode.$errMsg);				
+						fnLogMessageToDb('fnExpansion - ' . count($parentGSRecIDs) . ' old parent GSA recs');
+						//there are no new GSA moves so use one of the pre-existing ones
+						if (shuffle($parentGSRecIDs)) $fnResp = $parentGSRecIDs[0];
+						else {
+							//error has occurred in shuffle routine
+							$errCode = 'EXP-6';
+							$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($parentGSRecIDs, True);
+							fnLogMessageToDb($errCode.$errMsg);				
+						}
 					}
 				}
 			}
 		}
 	}
-		
+	
+	fnLogMessageToDb('exiting fnExpansion');
 	if ($errCode == '') return $fnResp;
 	else return $errCode.$errMsg;
 	
@@ -1368,6 +1422,7 @@ function fnSetUpGSARecs($board, $gameRow, $stackRows){
 		else $conn->commit();
 	}
 	
+	fnLogMessageToDb('exiting fnSetUpGSARecs');
 	if ($errCode == '') return $gsActionParent;
 	else return $errCode.$errMsg;
 }
@@ -2924,12 +2979,6 @@ function fnGetMoves($gameKey, $gameRow, $stackRows, $quick=False) {
 	MoveDir	= direction where 1 is left, 2 is forward and 3 is right
 	MovePos = stack number where move starts
 	*/
-
-	echo 'fnGetMoves game row' . '<BR>';
-	print_r($gameRow);
-	echo '<BR>' . 'fnGetMoves stack rows' . '<BR>';
-	print_r($stackRows);
-	echo '<BR>' ;
 	
 	fnLogMessageToDb ("start fnGetMoves. GK= {$gameKey}");
 	global $logLevel;
@@ -3353,6 +3402,7 @@ function fnFindNextStack($gameRow, $stackRows, $stackRowsIndex, $moveDir, $playe
 	if ($fnResp[0] == 0) {
 		if ($logLevel>4) fnLogMessageToDb('fnFindNextStack ending - valid move.');
 	}
+	fnLogMessageToDb('exiting fnFindNextStack');
 	return $fnResp;
 }
 //End fnFindNextStack
@@ -3472,35 +3522,48 @@ function fnProcessInput($callString) {
 				$gameState = '800x1x5x801x1x4x802x0x0x803x1x1x804x0x0x805x2x2x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x1x3x815x0x0x816x2x5';
 				$xGameRow = [];
 				$xStackRows = [];
-				fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
-				echo 'test fnInitialiseXRows';
-				print_r($xGameRow);
-				print_r($xStackRows);
+				$fnResp = fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+				if ($fnResp != '') {
+					$errCode = 'Testing';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);}
+				else {
+					echo 'test fnInitialiseXRows';
+					print_r($xGameRow);
+					print_r($xStackRows); }
 				
 				//function fnSetUpGSARecs($board, $gameRow, $stackRows)
 				echo 'test fnSetUpGSARecs'.'<BR>';
 				$gameState = '800x1x4x801x2x1x802x0x0x803x2x3x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x2x2x814x0x0x815x0x0x816x2x5';
 				$xGameRow = [];
 				$xStackRows = [];
-				fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
-				echo 'game rec'.'<BR>';
-				print_r($xGameRow);
-				echo '<BR>' . 'stacks recs' . '<BR>';
-				print_r($xStackRows);
-				echo '<BR>';
-				$fnResp = fnSetUpGSARecs($gameState, $xGameRow, $xStackRows);
-				if (is_string($fnResp)) echo $fnResp;
-				else print_r($fnResp);
+				$fnResp = fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+				if ($fnResp != '') {
+					$errCode = 'Testing';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+					echo $errCode.$errMsg;
+				}
+				else {
+					echo 'game rec'.'<BR>';
+					print_r($xGameRow);
+					echo '<BR>' . 'stacks recs' . '<BR>';
+					print_r($xStackRows);
+					echo '<BR>';
+					$fnResp = fnSetUpGSARecs($gameState, $xGameRow, $xStackRows);
+					if (is_string($fnResp)) echo $fnResp;
+					else print_r($fnResp);
+				}
 				*/
 				
 				//function fnQrySelectGSActionChildMoves($gameState, $fromGSRecID) 
 				echo 'test fnQrySelectGSActionChildMoves'.'<BR>';
-				$gameState = '800x1x5x801x0x0x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
-				$fromGSRecID = 48;
+				$gameState = '800x1x4x801x0x0x802x0x0x803x0x0x804x0x0x805x0x0x806x2x6x810x1x6x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x4';
+				$fromGSRecID = 129;
 				$gsActionRows = fnQrySelectGSActionChildMoves($gameState, $fromGSRecID);
 				print_r($gsActionRows);
 				echo '<BR>'.'test fnExpansion'.'<BR>';
-				$fnResp = fnExpansion($gsActionRows, 49);
+				$fnResp = fnExpansion($gsActionRows, 131);
 				if (is_string($fnResp)) echo $fnResp;
 				else print_r($fnResp);
 				
@@ -4505,14 +4568,35 @@ function fnStateOfPlay($gameKey, $turnCount=0) {
 
 	//get game record
 	if (strlen($gameKey)<20) {
-		fnLogMessageToDb("get game record using game ref");
-		$gameRef = $gameKey;
-		$gameRow = fnQrySelectGame($gameRef, $turnCount);
-		if (is_array($gameRow)==False) {
-			$errCode = "SoP-1";
-			//$errMsg = "Game " . $gameRef . " and turn count " . $turnCount . " not found in fnQrySelectGame";
-			$errMsg = $gameRow;
-			fnLogMessageToDb($errCode.$errMsg); }
+		if ($gameKey < 500) {
+			$fnResp = fnQrySelectGSActionRec($gameKey);
+			if (is_String($fnResp)) {
+				$errCode = 'SoP-5';
+				$errMsg = $fnResp;
+				fnLogMessageToDb($errCode.$errMsg);
+			}
+			else {
+				$gsActionRows = $fnResp;
+				$gameRow = [];
+				$stackRows = [];
+				$fnResp = fnInitialiseXRows($gsActionRows[0]['GameState'], $gameRow, $stackRows);
+				if ($fnResp != '') {
+					$errCode = 'SoP-6';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+				}
+			}
+		}
+		else {
+			fnLogMessageToDb("get game record using game ref");
+			$gameRef = $gameKey;
+			$gameRow = fnQrySelectGame($gameRef, $turnCount);
+			if (is_array($gameRow)==False) {
+				$errCode = "SoP-1";
+				//$errMsg = "Game " . $gameRef . " and turn count " . $turnCount . " not found in fnQrySelectGame";
+				$errMsg = $gameRow;
+				fnLogMessageToDb($errCode.$errMsg); }
+		}
 	}
 	else {
 		fnLogMessageToDb("get game record using hashKey");
@@ -4551,11 +4635,14 @@ function fnStateOfPlay($gameKey, $turnCount=0) {
 
 		//get pstacks record
 		if ($hashKey == "") {
-			$stackRows = fnQrySelectStacks($gameRef,$turnCount);
-			if (is_array($stackRows)==False) {
-				$errCode = "SoP-2";
-				$errMsg = $stackRows;
-				fnLogMessageToDb($errCode.$errMsg);
+			if (is_array($stackRows)) ;
+			else {
+				$stackRows = fnQrySelectStacks($gameRef,$turnCount);
+				if (is_array($stackRows)==False) {
+					$errCode = "SoP-2";
+					$errMsg = $stackRows;
+					fnLogMessageToDb($errCode.$errMsg);
+				}
 			}
 		}
 		else {
