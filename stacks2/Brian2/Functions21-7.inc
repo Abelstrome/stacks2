@@ -123,6 +123,7 @@ Tested fnSetUpGSARecs
 Tested fnQrySelectGSActionChildMoves
 Tested fnExpansion and fnQrySelectGSActionChildMoves
 Tested fnSelection plus fnQrySelectGSActionParent, fnQrySelectGSActionChildMoves
+Tested fnRollout
 */
 
 //Global variables for database queries
@@ -171,9 +172,9 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 		while ($errCode == '' and $loopCount < 1300){
 
 			//find next move for next player
-			$fnResp = fnGetMoves(0, $xGameRow, $xStackRows);
+			$fnResp = fnGetMoves('', $xGameRow, $xStackRows);
 			if (is_string($fnResp)) {
-				$errCode = "ROL-1";
+				$errCode = "ROL-12";
 				$errMsg = $fnResp;
 				fnLogMessageToDb($errCode.$errMsg);
 			}
@@ -184,54 +185,49 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 					//Player has moves available
 					//When simulating games for Monte Carlo Tree Search when a player has very few moves available the game may be counted as lost
 					if ($moveCount <= $minMoves) {
-						if ($gameRow['P1RecID'] == $gameRow['LastPlayerID']) {
+						if ($xGameRow['P1RecID'] == $xGameRow['LastPlayerID']) {
 							$player1or2 = 2;
-							$errCode = 'ROL-2';}
+							$errCode = 'ROL-02';}
 						else {
 							$player1or2 = 1;
-							$errCode = 'ROL-3';}
+							$errCode = 'ROL-03';}
 						$errMsg = 'P' . $player1or2 . ' has ' . $moveCount . ' moves available after ' . intval($xGameRow['TurnCount'] + 1) . ' turns';
 						fnLogMessageToDb($errCode.$errMsg);
 					}
 					else {
 						//choose the next move at random
 						if (shuffle($movesList)) {
-							$errCode2 = 'ROL-9';
-							$errMsg2 = 'next move is '. $movesList[0][1] . $movesList[0][2] ;
+							$errCode2 = 'ROL-19';
+							$errMsg2 = 'next move is '. $movesList[0][1] . '/' . $movesList[0][2] ;
+							if ($xGameRow['P1RecID'] == $xGameRow['LastPlayerID']) $errMsg2 .= ' for P2';
+							else $errMsg2 .= ' for P1';
 							fnLogMessageToDb($errCode2.$errMsg2);
 							$fnResp = fnSimulateMove('', $xGameRow, $xStackRows, $movesList[0][1], $movesList[0][2]);
-							// Game won codes: SMO-2 (P2), SMO-4a (P2), SMO-5 (P1), SMO-6a (P1)
-							// Error codes: SMO-3, SMO-7
-							if ($fnResp['errCode'] == 'SMO-1' or $fnResp['errCode'] == 'SMO-3' or $fnResp['errCode'] == 'SMO-7') {
-								//fnSimulateMove returned an error code
-								$errCode = 'ROL-5';
-								$errMsg = $fnResp;
-								fnLogMessageToDb($errCode.$errMsg);
-							}
-							elseif ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
+							//echo $errMsg2 . '<br>'; print_r($xStackRows); echo '<br>';
+							if ($fnResp['errCode'] == 'SMO-2' or $fnResp['errCode'] == 'SMO-4a') {
 							//elseif ($xGameRow['Winner'] == $xGameRow['P2RecID']) {
 								// P2 has won
-								$errCode = 'ROL-6';
+								$errCode = 'ROL-06';
 								$errMsg = 'P2 has won';
 								fnLogMessageToDb($errCode.$errMsg);
 							}
 							elseif ($fnResp['errCode'] == 'SMO-5' or $fnResp['errCode'] == 'SMO-6a') {
 							//elseif ($xGameRow['Winner'] == $xGameRow['P1RecID']) {
 								// P1 has won
-								$errCode = 'ROL-7';
+								$errCode = 'ROL-07';
 								$errMsg = 'P1 has won';
 								fnLogMessageToDb($errCode.$errMsg);
 							}
 							elseif ($fnResp['errCode'] != '') {
-								//unknown response code
-								$errCode = 'ROL-8';
+								//error response code
+								$errCode = 'ROL-18';
 								$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
 								fnLogMessageToDb($errCode.$errMsg);
 							}
 						}
 						else{
 							//error has occurred in shuffle routine
-							$errCode = 'ROL-4';
+							$errCode = 'ROL-14';
 							$errMsg = 'error has occurred in shuffle routine when shuffling ' . print_r($movesList, True);
 							fnLogMessageToDb($errCode.$errMsg);
 						}
@@ -241,13 +237,14 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 
 			$loopCount++;
 		}
-		//echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . ' result ' . $fnResp2[1];
+		//echo 'end time ' . date("Y-m-d H:i:s") . ' turn count ' . $xGameRow['TurnCount'] . '<br>';
 	}
 		
 	if ($errCode == '') {
 		//game has reached max number of moves so effectively a draw
-		$errCode = 'ROL-10';
+		$errCode = 'ROL-00';
 		$errMsg = 'Game drawn';
+		fnLogMessageToDb($errCode.$errMsg);
 	}
 	fnLogMessageToDb('exiting fnRollout');
 	return array('errCode' => $errCode, 'errMsg' => $errMsg) ;
@@ -1236,8 +1233,7 @@ function fnRunGCP3 ($playerName, $gameRef){
 									fnLogMessageToDb($errCode.$errMsg);
 								}
 								else {
-									//if rec ID returned by fnExpansion is not the current GSA ID 
-									//		then make the returned GSRecID the current GSA rec
+									//if rec ID returned by fnExpansion is not the current GSA ID then make the returned GSRecID the current GSA rec
 									if ($fnResp != $currentGSActionRecID) {
 										$currentGSActionRecID = $fnResp;
 										$gsRecIDs[] = $currentGSActionRecID;
@@ -1255,35 +1251,39 @@ function fnRunGCP3 ($playerName, $gameRef){
 										$gsActionRows = $fnResp;
 										//call Rollout
 										$fnResp = fnRollout($gsActionRows[0][NextGameState], [], []);
-										//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
-										//Game won codes: ROL-2 (P2), ROL-3 (P1), ROL-6 (P2), ROL-7 (P1), ROL-10 (Draw)
+										//Error codes begin with ROL-1 e.g. ROL-11
+										//Game won codes begin witn ROL-0 e.g. ROL-02 (P2), ROL-03 (P1), ROL-06 (P2), ROL-07 (P1), ROL-00 (Draw)
 										switch ($fnResp['errCode']) {
-											//Error codes: ROL-1, ROL-4, ROL-5, ROL-8
-											case 'ROL-1':
-											case 'ROL-4':
-											case 'ROL-5':
-											case 'ROL-8':
+											/*
+											//Error codes: ROL-12, ROL-14, ROL-15, ROL-18
+											//case 'ROL-12':
+											//case 'ROL-14':
+											//case 'ROL-15':
+											//case 'ROL-18':
+											//Error codes begin with ROL-1__
+											case strpos($fnResp['errCode'], 'ROL-1') === 0:
 												$errCode = 'GC3-12';
 												$errMsg = $fnResp['errMsg'];
 												fnLogMessageToDb($errCode.$errMsg);
 												break;
+											*/
 											//If P2 wins score is -1
-											case 'ROL-2':
-											case 'ROL-6':
+											case 'ROL-02':
+											case 'ROL-06':
 												$score = -1;
 												break;
 											//If P1 wins score is +1
-											case 'ROL-3':
-											case 'ROL-7':
+											case 'ROL-03':
+											case 'ROL-07':
 												$score = 1;
 												break;
 											//if game is drawn score is 0
-											case 'ROL-10':
+											case 'ROL-00':
 												$score = 0;
 												break;
 											default:
 												$errCode = 'GC3-15';
-												$errMsg = 'unexpected resp from fnRollout:' . $fnResp['$errCode'] . '<>' . fnResp['$errMsg'] . '<';
+												$errMsg = $fnResp['errMsg'];
 												fnLogMessageToDb($errCode.$errMsg);
 										}
 									}
@@ -3563,7 +3563,7 @@ function fnProcessInput($callString) {
 				if (is_string($fnResp)) echo $fnResp;
 				else print_r($fnResp);
 				*/
-				
+				/*
 				echo 'testing fnQrySelectGSActionParent' . '<br>' ;
 				//function fnQrySelectGSActionParent($gameState)
 				$gameState = '800x1x5x801x0x0x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
@@ -3588,7 +3588,31 @@ function fnProcessInput($callString) {
 						else print_r($fnResp);
 					}
 				}
-				
+				*/
+				$gameState = '800x1x4x801x1x1x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
+				$xGameRow = [];
+				$xStackRows = [];
+				$fnResp = fnInitialiseXRows($gameState, $xGameRow, $xStackRows);
+				if ($fnResp != '') {
+					$errCode = 'Testing';
+					$errMsg = $fnResp;
+					fnLogMessageToDb($errCode.$errMsg);
+					echo $errCode.$errMsg;
+				}
+				else {
+					//echo 'game rec'.'<BR>';
+					//print_r($xGameRow);
+					//echo '<BR>' . 'stacks recs' . '<BR>';
+					//print_r($xStackRows);
+					//echo '<BR>';
+
+					echo '<BR>'.'test fnRollout ';
+					//$fnResp = fnRollout($gameState, $xGameRow, $xStackRows);
+					$fnResp = fnRollout('', $xGameRow, $xStackRows);
+					//print_r($fnResp);
+					//print($fnResp['errMsg']);
+					$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
+				}
 				break;
 
 			case 'COPY':
