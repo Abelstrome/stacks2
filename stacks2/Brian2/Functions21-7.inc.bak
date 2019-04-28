@@ -123,7 +123,8 @@ Tested fnSetUpGSARecs
 Tested fnQrySelectGSActionChildMoves
 Tested fnExpansion and fnQrySelectGSActionChildMoves
 Tested fnSelection plus fnQrySelectGSActionParent, fnQrySelectGSActionChildMoves
-Testing fnRollout
+Tested fnRollout
+Testing fnBackPropagation
 */
 
 //Global variables for database queries
@@ -3563,7 +3564,8 @@ function fnProcessInput($callString) {
 				if (is_string($fnResp)) echo $fnResp;
 				else print_r($fnResp);
 				*/
-				/*
+				
+				//testing fnSelection
 				echo 'testing fnQrySelectGSActionParent' . '<br>' ;
 				//function fnQrySelectGSActionParent($gameState)
 				$gameState = '800x1x5x801x0x0x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
@@ -3588,7 +3590,9 @@ function fnProcessInput($callString) {
 						else print_r($fnResp);
 					}
 				}
-				*/
+				
+				/*
+				//testing fnRollout
 				$gameState = '800x1x4x801x1x1x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
 				$xGameRow = [];
 				$xStackRows = [];
@@ -3613,6 +3617,8 @@ function fnProcessInput($callString) {
 					//print($fnResp['errMsg']);
 					$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
 				}
+				*/
+				
 				break;
 
 			case 'COPY':
