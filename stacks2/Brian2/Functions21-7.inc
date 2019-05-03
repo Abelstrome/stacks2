@@ -124,7 +124,7 @@ Tested fnQrySelectGSActionChildMoves
 Tested fnExpansion and fnQrySelectGSActionChildMoves
 Tested fnSelection plus fnQrySelectGSActionParent, fnQrySelectGSActionChildMoves
 Tested fnRollout
-Testing fnBackPropagation -check that the list of GSRecIDs from fnSelection is complete
+Tested fnBackPropagation
 */
 
 //Global variables for database queries
@@ -251,7 +251,7 @@ function fnRollout($gameState, $xGameRow, $xStackRows){
 	return array('errCode' => $errCode, 'errMsg' => $errMsg) ;
 }
 //End fnRollout
-function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
+function fnBackPropagation($score, $gsRecIDs){
 
 	/*Update the score on the current record and its parents
 	Loop through the GSAs in the GSRecIDs list starting at the end
@@ -265,7 +265,6 @@ function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
 				1) NumVisits++
 				2) TotalScore = TotalScore + $score
 	Repeat previous step 2 until get to end of  GSRecIDs list
-	Check GSRecID of current parent = originalGSActionRecID. If not then raise an error and stop
 	*/
 
 	fnLogMessageToDb('(' . $logLevel . ') start fnBackPropagation');
@@ -296,7 +295,7 @@ function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
 			$fnResp = fnQryUpdateGSAction($gsActionRows[0]['GSRecID'], $gsActionRows[0]['GameState'], 
 											$gsActionRows[0]['MoveDir'], $gsActionRows[0]['MovePos'], 
 											$gsActionRows[0]['FromGSRecID'], $gsActionRows[0]['NextGameState'], 
-											$gsActionRows[0]['TotalScore'], $gsActionRows[0]['NumVisits']);
+											$gsActionRows[0]['TotalScore'], $gsActionRows[0]['NumVisits'], $gsActionRows[0]['WinMove']);
 			if (strlen($fnResp) > 0) {
 				//error has occured
 				$errCode = 'BP-2';
@@ -323,7 +322,7 @@ function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
 				$fnResp = fnQryUpdateGSAction($gsActionRows[0]['GSRecID'], $gsActionRows[0]['GameState'], 
 												$gsActionRows[0]['MoveDir'], $gsActionRows[0]['MovePos'], 
 												$gsActionRows[0]['FromGSRecID'], $gsActionRows[0]['NextGameState'], 
-												$gsActionRows[0]['TotalScore'], $gsActionRows[0]['NumVisits']);
+												$gsActionRows[0]['TotalScore'], $gsActionRows[0]['NumVisits'], $gsActionRows[0]['WinMove']);
 				if (strlen($fnResp) > 0) {
 					//error has occured
 					$errCode = 'BP-3';
@@ -337,14 +336,6 @@ function fnBackPropagation($score, $originalGSActionRecID, $gsRecIDs){
 		$gsRecIDsPtr--;
 
 	} //end of while loop
-
-	//Check GSRecID of current parent = originalGSActionRecID. If not then raise an error and stop
-	if ($gsActionRows[0]['GSRecID'] != $originalGSActionRecID){
-		$errCode = 'BP-4';
-		$errMsg = 'GSRecIDs have not lead back to the original parent record';
-		fnLogMessageToDb($errCode.$errMsg);
-		$logMsgs[] = $errCode.$errMsg;
-	}
 		
 	if (strlen($errCode) > 0){
 		$conn->rollback();
@@ -3587,7 +3578,14 @@ function fnProcessInput($callString) {
 						//function fnSelection($gsActionRows, $gsActionParent)
 						$fnResp = fnSelection($gsActionRows, $gsActionParent);
 						if (is_String($fnResp)) echo $fnResp;
-						else print_r($fnResp);
+						else {
+							$gsRecIDs = $fnResp;
+							print_r($gsRecIDs);
+							echo '<br>' . 'testing fnBackPropagation' . '<br>' ;
+							//function fnBackPropagation($score, $gsRecIDs)
+							$fnResp = fnBackPropagation(1, $gsRecIDs);
+							echo 'output from fnBackPropagation: ' . $fnResp . '<';
+						}
 					}
 				}
 				
