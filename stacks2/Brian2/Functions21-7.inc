@@ -125,6 +125,7 @@ Tested fnExpansion and fnQrySelectGSActionChildMoves
 Tested fnSelection plus fnQrySelectGSActionParent, fnQrySelectGSActionChildMoves
 Tested fnRollout
 Tested fnBackPropagation
+Testing fnRunGCP3
 */
 
 //Global variables for database queries
@@ -970,9 +971,10 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 						$xStackRows = $savedxStackRows;
 					} //end of foreach loop
 					//e. Select one of the new GSA moves at random and return it's record ID
+					$resp = [];
 					if (count($newParentGSRecIDs) > 0) {
 						fnLogMessageToDb('fnExpansion - ' . count($newParentGSRecIDs) . ' new parent GSA recs');
-						if (shuffle($newParentGSRecIDs)) $fnResp = $newParentGSRecIDs[0];
+						if (shuffle($newParentGSRecIDs)) $resp[] = intval($newParentGSRecIDs[0]);
 						else {
 							//error has occurred in shuffle routine
 							$errCode = 'EXP-5';
@@ -983,7 +985,7 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 					else {
 						fnLogMessageToDb('fnExpansion - ' . count($parentGSRecIDs) . ' old parent GSA recs');
 						//there are no new GSA moves so use one of the pre-existing ones
-						if (shuffle($parentGSRecIDs)) $fnResp = $parentGSRecIDs[0];
+						if (shuffle($parentGSRecIDs)) $resp[] = intval($parentGSRecIDs[0]);
 						else {
 							//error has occurred in shuffle routine
 							$errCode = 'EXP-6';
@@ -997,12 +999,12 @@ function fnExpansion($gsActionRows, $currentGSActionRecID) {
 	}
 	
 	fnLogMessageToDb('exiting fnExpansion');
-	if ($errCode == '') return $fnResp;
+	if ($errCode == '') return $resp;
 	else return $errCode.$errMsg;
 	
 }
 //End of fnExpansion
-function fnRunGCP3 ($playerName, $gameRef){
+function fnRunGCP3 ($playerName, $gameRef=0){
 	global $logLevel;
 	$errCode = '';
 	$errMsg = '';
@@ -1072,8 +1074,8 @@ function fnRunGCP3 ($playerName, $gameRef){
 		}
 	}
 	echo 'game ref: ' . $gameRow['GameRef'] . '<BR>';
-
-	while ($errCode == '' and $turnCount < 10000) {
+	$turnCount = 0;
+	while ($errCode == '' and $turnCount < 3) {
 		$turnCount++;
 		//stop if the game is already won
 		if ($gameRow['Winner'] > 0) break;
@@ -1226,8 +1228,8 @@ function fnRunGCP3 ($playerName, $gameRef){
 								}
 								else {
 									//if rec ID returned by fnExpansion is not the current GSA ID then make the returned GSRecID the current GSA rec
-									if ($fnResp != $currentGSActionRecID) {
-										$currentGSActionRecID = $fnResp;
+									if ($fnResp[0] != $currentGSActionRecID) {
+										$currentGSActionRecID = $fnResp[0];
 										$gsRecIDs[] = $currentGSActionRecID;
 									}
 									//iv. Call Rollout to get score for a simulated game starting from NextGameState 
@@ -1301,6 +1303,8 @@ function fnRunGCP3 ($playerName, $gameRef){
 			}
 		} //end of actions for P1 player only
 	} // end of while loop
+	
+	fnLogMessageToDb('existing fnRunGCP3');
 }
 // End of fnRunGCP3
 function fnSetUpGSARecs($board, $gameRow, $stackRows){
@@ -3552,9 +3556,8 @@ function fnProcessInput($callString) {
 				print_r($gsActionRows);
 				echo '<BR>'.'test fnExpansion'.'<BR>';
 				$fnResp = fnExpansion($gsActionRows, 131);
-				if (is_string($fnResp)) echo $fnResp;
+				if (is_string($fnResp)) print_r($fnResp);
 				else print_r($fnResp);
-				*/
 				
 				//testing fnSelection
 				echo 'testing fnQrySelectGSActionParent' . '<br>' ;
@@ -3589,7 +3592,6 @@ function fnProcessInput($callString) {
 					}
 				}
 				
-				/*
 				//testing fnRollout
 				$gameState = '800x1x4x801x1x1x802x0x0x803x0x0x804x0x0x805x0x0x806x2x5x810x1x5x811x0x0x812x0x0x813x0x0x814x0x0x815x0x0x816x2x5';
 				$xGameRow = [];
@@ -3616,6 +3618,10 @@ function fnProcessInput($callString) {
 					$errMsg = $fnResp['errCode'].$fnResp['errMsg'];
 				}
 				*/
+				
+				echo '<br>' . 'testing fnRunGCP3' . '<br>' ;
+				//function fnRunGCP3 ($playerName, $gameRef=0)
+				$fnResp = fnRunGCP3('GCP3');
 				
 				break;
 
