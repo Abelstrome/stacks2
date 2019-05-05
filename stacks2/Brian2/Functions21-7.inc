@@ -3556,7 +3556,7 @@ function fnProcessInput($callString) {
 				print_r($gsActionRows);
 				echo '<BR>'.'test fnExpansion'.'<BR>';
 				$fnResp = fnExpansion($gsActionRows, 131);
-				if (is_string($fnResp)) print_r($fnResp);
+				if (is_string($fnResp)) echo $fnResp;
 				else print_r($fnResp);
 				
 				//testing fnSelection
