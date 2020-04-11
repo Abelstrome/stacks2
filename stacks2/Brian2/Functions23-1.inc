@@ -16,10 +16,10 @@ function fnDbConnect() {
 	global $callString;
 
 	if (strpos(strtoupper($_SERVER['SCRIPT_NAME']),'BATCH') !== False){
-		require 'C:/xampp/htdocs/stacks/Alison2/blah.ini'; 
+		require 'C:/xampp/htdocs/stacks/Alison2/blah.ini';
 	}
-	else if (strtoupper(substr($_SERVER['DOCUMENT_ROOT'],17,8)) == 'ICODE-GO') {
-		require $_SERVER['DOCUMENT_ROOT'].'/stacks2/Alison2.blah.ini'; }
+	else if (strpos(strtoupper($_SERVER['DOCUMENT_ROOT']), 'ICODE-GO') !== False) {
+		require $_SERVER['DOCUMENT_ROOT'].'/stacks/Alison2/blah.ini'; }
 	else if ($_SERVER['SERVER_NAME'] == 'localhost') {
 		require 'C:/xampp/htdocs/stacks/Alison2/blah.ini'; }
 	else {
@@ -28,112 +28,115 @@ function fnDbConnect() {
 	$servername = Servername;
 	$username = Username;
 	$password = Password;
-	$dbname = Dbname;	
-	
+	$dbname = Dbname;
+
 	try {
 		$conn = new PDO("mysql:host=$servername;dbname=".$dbname, $username, $password);
 		// set the PDO error mode to exception
 		$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-		
+
 		//prepare database queries ready for use later
-		
+
 		//store logging info
 		$query = "INSERT INTO v2_logging SET LogMessage = :logMessage, CallString = :callString";
 		$qryLogMessage = $conn->prepare($query);
-		
+
 		//tidy log by deleteing messages over 1 day old
-		$query = "SELECT * FROM v2_logging WHERE TimeStamp < CURRENT_DATE - INTERVAL 1 DAY";
+		//$query = "SELECT * FROM v2_logging WHERE TimeStamp < CURRENT_DATE - INTERVAL 1 DAY";
+      	//tidy log table by deleting all but the last 500 messages
+      	$query = "DELETE FROM v2_logging WHERE LogRecID <= (SELECT subQry.LogRecID FROM ";
+        $query = $query . "(SELECT LogRecID FROM v2_logging AS logTab2 ORDER BY logTab2.LogRecID DESC LIMIT 1 OFFSET 500) AS subQry) ";
 		$qryTidyLog = $conn->prepare($query);
-		
+
 		//Select references
 		$query = "SELECT * from v2_reference";
 		$qrySelectRefs = $conn->prepare($query);
-		
+
 		//Update references
 		$query = "UPDATE v2_reference SET NextPlayerRef = :playerRef, NextGameRef = :gameRef WHERE RefRecID = 1";
 		$qryUpdateRefs = $conn->prepare($query);
-		
+
 		//Select player record
 		$query = "SELECT * from v2_players WHERE PlayerName = :playerName";
 		$qrySelectPlayer = $conn->prepare($query);
-		
+
 		//Add new player record
 		$query = "INSERT INTO v2_players SET PlayerRef = :playerRef, PlayerName = :playerName, Password = :password, Hint = :hint";
 		$qryAddPlayer = $conn->prepare($query);
-		
+
 		//Add new stack record
 		$query = "INSERT INTO v2_stacks SET GameRef=:gameRef, StackNum=:stackNum, StackHeight=:stackHeight, OwnerPNum=:top, Counters=:counters, TurnCount=:turnCount";
 		$qryAddStack = $conn->prepare($query);
-		
+
 		//Add new nmx-stack record
 		$query = "INSERT INTO nmx_stacks SET HashKey=:hashKey, GameRef=:gameRef, StackNum=:stackNum, StackHeight=:stackHeight, Top=:top, TurnCount=:turnCount";
 		$qryAddNmxStack = $conn->prepare($query);
-		
+
 		//Select stack records
-		$query = "SELECT * FROM v2_stacks WHERE GameRef = :gameRef AND TurnCount = :turnCount ORDER BY StackNum" ; 
+		$query = "SELECT * FROM v2_stacks WHERE GameRef = :gameRef AND TurnCount = :turnCount ORDER BY StackNum" ;
 		$qrySelectStacks = $conn->prepare($query);
-		
+
 		//Select nmx-stack records
-		$query = "SELECT * FROM nmx_stacks WHERE HashKey = :hashKey ORDER BY StackNum" ; 
+		$query = "SELECT * FROM nmx_stacks WHERE HashKey = :hashKey ORDER BY StackNum" ;
 		$qrySelectNmxStacks = $conn->prepare($query);
-		
+
 		//Update stack record
 		$query = "UPDATE v2_stacks SET StackNum = :stackNum, StackHeight = :stackHeight, OwnerPNum = :top, Counters = :counters, ";
 		$query = $query . "TurnCount = :turnCount WHERE StackRecID = :stackRecID";
 		$qryUpdateStack = $conn->prepare($query);
-		
+
 		//Update nmx-stack record
 		$query = "UPDATE nmx_stacks SET StackNum = :stackNum, StackHeight = :stackHeight, OwnerPNum = :top, TurnCount = :turnCount WHERE StackRecID = :stackRecID";
 		$qryUpdateNmxStack = $conn->prepare($query);
-		
-		//Delete stack records for multiple turns 
+
+		//Delete stack records for multiple turns
 		$query = "DELETE FROM v2_stacks WHERE GameRecID = :gameRef AND TurnCount > :turnCount";
 		$qryDeleteStacksForManyTurns = $conn->prepare($query);
-		
+
 		//Delete stack records for one turn
 		$query = "DELETE FROM v2_stacks WHERE GameRecID = :gameRef AND TurnCount = :turnCount";
 		$qryDeleteStacksForOneTurn = $conn->prepare($query);
-		
+
 		//Add new counters record
 		$query = "INSERT INTO counters SET GameRef = :gameRef, StackNum = :stackNum, PlayerRef = :playerRef, CounterHeight = :counterHeight, TurnCount = :turnCount";
 		$qryAddCounter = $conn->prepare($query);
-		
+
 		//Add new nmx_counters record
 		$query = "INSERT INTO nmx_counters SET HashKey=:hashKey, GameRef=:gameRef, StackNum=:stackNum, PlayerRef=:playerRef, CounterHeight=:counterHeight, TurnCount=:turnCount";
 		$qryAddNmxCounter = $conn->prepare($query);
-		
+
 		//Update counters record
 		$query = "UPDATE counters SET GameRef = :gameRef, StackNum = :stackNum, PlayerRef = :playerRef, CounterHeight = :counterHeight WHERE CounterRecID = :counterRecID" ;
 		$qryUpdateCounter = $conn->prepare($query);
-		
+
 		//Update nmx_counters record
 		$query = "UPDATE nmx_counters SET StackNum = :stackNum, PlayerRef = :playerRef, CounterHeight = :counterHeight, TurnCount = :turnCount WHERE CounterRecID = :counterRecID" ;
 		$qryUpdateNmxCounter = $conn->prepare($query);
-		
+
 		//Select counters records
 		$query = "SELECT * FROM counters WHERE GameRef = :gameRef AND StackNum = :stackNum AND TurnCount = :turnCount ORDER BY CounterHeight" ;
 		$qrySelectCounters = $conn->prepare($query);
-		
+
 		//Select nmx_counters records
 		$query = "SELECT * FROM nmx_counters WHERE HashKey = :hashKey AND StackNum = :stackNum ORDER BY CounterHeight" ;
 		$qrySelectNmxCounters = $conn->prepare($query);
-		
+
 		//Select all counters records
 		$query = "SELECT * FROM counters WHERE GameRef = :gameRef AND TurnCount = :turnCount ORDER BY StackNum, CounterHeight" ;
 		$qrySelectAllCounters = $conn->prepare($query);
-		
+
 		//Select all nmx_counters records
 		$query = "SELECT * FROM nmx_counters WHERE HashKey = :hashKey ORDER BY StackNum, CounterHeight" ;
 		$qrySelectAllNmxCounters = $conn->prepare($query);
-		
+
 		//Delete stack records for one turn
 		$query = "DELETE FROM counters WHERE GameRef = :gameRef AND TurnCount = :turnCount" ;
 		$qryDeleteCountersForOneTurn = $conn->prepare($query);
-		
+
 		//Delete stack records for multiple turns
 		$query = "DELETE FROM counters WHERE GameRef = :gameRef AND TurnCount > :turnCount" ;
 		$qryDeleteCountersForManyTurns = $conn->prepare($query);
-		
+
 		//Add new game record
 		$query = "INSERT INTO v2_games SET GameRef=:gameRef, P1RecID=:p1Ref, P2RecID=:p2Ref, LastPlayerID=:lastPlayerID, StartDate=:startDate, ";
 		$query = $query . "LastUpdated=:lastUpdated, AreaSize=:areaSize, AreaWidth=:areaWidth, Winner=:winner, ";
@@ -144,7 +147,7 @@ function fnDbConnect() {
 		$query = "INSERT INTO nmx_games SET HashKey=:hashKey, GameRef=:gameRef, P1RecID=:p1Ref, P2RecID=:p2Ref, LastPlayer=:lastPlayer, AreaSize=:areaSize, ";
 		$query = $query . "Winner=:winner, TurnCount=:turnCount, TurnCountVer=:turnCountVer";
 		$qryAddNmxGame = $conn->prepare($query);
-		
+
 		//Update game
 		$query = "UPDATE v2_games SET P1RecID=:p1Ref, P2RecID=:p2Ref, LastPlayerID=:lastPlayerID, ";
 		$query = $query . "LastUpdated=:lastUpdated, Winner=:winner, TurnCount=:turnCount WHERE GameRef=:gameRef AND TurnCountVer=:turnCountVer";
@@ -154,7 +157,7 @@ function fnDbConnect() {
 		$query = "UPDATE nmx_games SET P1Ref=:p1Ref, P2RecID=:p2Ref, LastPlayer=:lastPlayer, ";
 		$query = $query . "AreaSize=:areaSize, Winner=:winner, TurnCount=:turnCount, GameScore=:gameScore WHERE HashKey=:hashKey";
 		$qryUpdateNmxGame = $conn->prepare($query);
-		
+
 		//Select game record
 		$query = "SELECT v2_games.GameRecID, v2_games.GameRef, v2_games.P1RecID, p1.PlayerName AS P1Name, v2_games.P2RecID, p2.PlayerName AS P2Name, ";
 		$query = $query . "v2_games.LastPlayerID, LP.PlayerName as LPName, v2_games.StartDate, v2_games.AreaSize, v2_games.AreaWidth, v2_games.Winner, v2_games.TurnCount ";
@@ -163,35 +166,35 @@ function fnDbConnect() {
 		$query = $query . "INNER JOIN v2_players AS LP ON v2_games.LastPlayerID = LP.PlayerRef ";
 		$query = $query . "WHERE v2_games.GameRef = :gameRef AND v2_games.TurnCountVer = :turnCountVer";
 		$qrySelectGame = $conn->prepare($query);
-		
+
 		//select game record using GameRecID
 		$query = "SELECT * FROM v2_games WHERE GameRecID = :gameRecID";
 		$qrySelectGameByID = $conn->prepare($query);
 
-		//select nmx_games record 
+		//select nmx_games record
 		$query = "SELECT * FROM nmx_games WHERE HashKey = :hashKey";
 		$qrySelectNmxGame = $conn->prepare($query);
-		
+
 		//Select game records for player
 		$query = "SELECT * FROM v2_games WHERE (P1RecID = :playerRef OR P2RecID = :playerRef) AND TurnCountVer = :turnCountVer";
 		$qrySelectGamesForPlayer = $conn->prepare($query);
-		
+
 		//Delete game records
 		$query = "DELETE FROM v2_games WHERE gameRef = :gameRef AND TurnCount > :turnCount";
 		$qryDeleteGames = $conn->prepare($query);
-		
+
 		//Select open games and join with players table to get player name
 		$query = "SELECT v2_games.GameRef, v2_games.P1RecID, players.PlayerName FROM v2_games, players WHERE v2_games.P1RecID = players.PlayerRef AND v2_games.P2RecID = 0";
 		$qrySelectOpenGames = $conn->prepare($query);
-	
+
 		//Select GC (GameCentral) player data
 		$query = 'SELECT * FROM v2_gcplayer_data where GCPlayerRef = :playerRef';
 		$qrySelectGCPlayerData = $conn->prepare($query);
-		
+
 		//Select GC (GameCentral) player data v2
 		$query = 'SELECT * FROM v2_gcplayer_data2 where GCPlayerRef = :playerRef';
 		$qrySelectGCPlayerData2 = $conn->prepare($query);
-		
+
 		//Add GC (GameCentral) player data v2
 		$query = 'INSERT INTO v2_gcplayer_data2 SET GCPlayerRef = :playerRef, Board = :board, MovePos = :movePos, MoveDir = :moveDir, QValue = :qValue';
 		$qryAddGCPlayerData2 = $conn->prepare($query);
@@ -199,29 +202,29 @@ function fnDbConnect() {
 		//Update GC (GameCentral) player data v2
 		$query = 'UPDATE v2_gcplayer_data2 SET QValue = :qValue, UsedTimes = :usedTimes WHERE GCPlayerRef = :playerRef AND Board = :board AND MoveDir = :moveDir AND MovePos = :movePos';
 		$qryUpdateGCPlayerData2 = $conn->prepare($query);
-		
+
 		//Add GC (GameCerntral) player data
 		$query = 'INSERT INTO v2_gcplayer_data SET GCPlayerRef = :playerRef, Board = :board, MovePos = :movePos, MoveDir = :moveDir, Source = :source';
 		$qryAddGCPlayerData = $conn->prepare($query);
-		
+
 		//Update GC (GameCentral) player data
 		$query = 'UPDATE v2_gcplayer_data SET Source = :source, UsedTimes = :usedTimes WHERE GCPlayerRef = :playerRef AND Board = :board';
 		$qryUpdateGCPlayerData = $conn->prepare($query);
-		
+
 		//Add GSA
 		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, ';
-		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove'
+		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove';
 		$qryAddGSAction = $conn->prepare($query);
-		
+
 		//Update GSA
 		$query = 'UPDATE v2_gamestateaction SET GameState = :gameState, MoveDir = :moveDir, MovePos = :movePos, NextGameState =:nextGameState, ';
 		$query = $query . 'FromGSRecID = :fromGSRecID, TotalScore = :totalScore, NumVisits = :numVisits, WinMove = :winMove WHERE GSRecID = :gsRecID';
 		$qryUpdateGSAction = $conn->prepare($query);
-		
+
 		//Select GSA move records
 		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND FromGSRecID = :fromGSRecID';
 		$qrySelectGSActionMoves = $conn->prepare($query);
-		
+
 		//Select GSA parent record
 		$query = 'SELECT * FROM  v2_gamestateaction WHERE GameState = :gameState AND MoveDir = 0';
 		$qrySelectGSActionRoot = $conn->prepare($query);
@@ -229,7 +232,7 @@ function fnDbConnect() {
 		//Select GSA record
 		$query = 'SELECT * FROM  v2_gamestateaction WHERE GSRecID = :gsRecID';
 		$qrySelectGSActionRec = $conn->prepare($query);
-				
+
 		fnLogMessageToDb("Connection successful");
 		fnQrySelectRefs();
 	}
@@ -244,7 +247,7 @@ function fnDbConnect() {
 function fnLogMessageToDb($logMessage) {
 	global $qryLogMessage;
 	global $callString;
-	
+
 	//execute prepared query
 	try {
 		//execute query
@@ -261,7 +264,7 @@ function fnLogMessageToDb($logMessage) {
 //End fnLogMessageToDb
 function fnQryTidyDbLog() {
 	fnLogMessageToDb("Start fnQryTidyDbLog");
-	global $qryTidyLog; 
+	global $qryTidyLog;
 	//execute prepared query
 	try {
 		//execute query
@@ -287,11 +290,11 @@ function fnQrySelectGCPlayerData($playerRef) {
 		//execute query
 		$qrySelectGCPlayerData->execute(array(':playerRef'=>$playerRef));
 		// set the resulting array to associative
-		$result = $qrySelectGCPlayerData->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGCPlayerData->fetchAll() as $aGCPlayerRow) { 
+		$result = $qrySelectGCPlayerData->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGCPlayerData->fetchAll() as $aGCPlayerRow) {
 			array_push($aGCPlayerRow,"N");
 			$gcPlayerMoves[] = $aGCPlayerRow;
-			//echo 'a GC Row ' . print_r($aGCPlayerRow, True) . '<BR>'; 
+			//echo 'a GC Row ' . print_r($aGCPlayerRow, True) . '<BR>';
 		}
 		return $gcPlayerMoves;
 	}
@@ -301,7 +304,7 @@ function fnQrySelectGCPlayerData($playerRef) {
 		fnLogMessageToDb($errMsg);
 		////Rollbar::report_exception($e, array('error message' => $errMsg));
 		return "SelectGCPlayerData error";
-		}	
+		}
 }
 //End fnQrySelectGCPlayerData
 function fnQrySelectGCPlayerData2($playerRef) {
@@ -314,13 +317,13 @@ function fnQrySelectGCPlayerData2($playerRef) {
 		//execute query
 		$qrySelectGCPlayerData2->execute(array(':playerRef'=>$playerRef));
 		// set the resulting array to associative
-		$result = $qrySelectGCPlayerData2->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGCPlayerData2->fetchAll() as $aGCPlayerRow) { 
+		$result = $qrySelectGCPlayerData2->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGCPlayerData2->fetchAll() as $aGCPlayerRow) {
 			//array_push($aGCPlayerRow,"N");
 			//concatenate the board, moveDir and movePos to make a search key
-			$gcPlayerMoves[] = array('BoardMoveKey' => $aGCPlayerRow['Board'] . 'x' . $aGCPlayerRow['MoveDir'] . 'x' . $aGCPlayerRow['MovePos'], 
+			$gcPlayerMoves[] = array('BoardMoveKey' => $aGCPlayerRow['Board'] . 'x' . $aGCPlayerRow['MoveDir'] . 'x' . $aGCPlayerRow['MovePos'],
 									'QValue' => $aGCPlayerRow['QValue'], 'UsedTimes' => $aGCPlayerRow['UsedTimes'], 0 => 'N');
-			//echo 'a GC Row ' . print_r($aGCPlayerRow, True) . '<BR>'; 
+			//echo 'a GC Row ' . print_r($aGCPlayerRow, True) . '<BR>';
 		}
 		return $gcPlayerMoves;
 	}
@@ -337,14 +340,14 @@ function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0
 	$errMsg = '';
 
 	try {
-		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState, 
+		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState,
 								':moveDir' => $moveDir,':movePos' => $movePos, ':winMove' => $winMove));
 	}
 	catch(PDOException $e) {
 		$errMsg = "qryAddGSAction failed (for GameState " . $gameState . ' and fromGSRecID ' . $fromGSRecID . '): ' . $e->getMessage();
 		fnLogMessageToDb($errMsg);
 	}
-	
+
 	if ($errMsg = ''){
 		fnLogMessageToDb('fnQryAddGSAction finished');
 		return '';
@@ -357,10 +360,10 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 	fnLogMessageToDb('start fnQryUpdateGSAction');
 	global $qryUpdateGSAction;
 	$errMsg = '';
-	
+
 	try {
 		//execute query
-		$qryUpdateGSAction->execute(array(':gsRecID' => $gsRecID, ':gameState' => $gameState, ':moveDir' => $moveDir,':movePos' => $movePos, 
+		$qryUpdateGSAction->execute(array(':gsRecID' => $gsRecID, ':gameState' => $gameState, ':moveDir' => $moveDir,':movePos' => $movePos,
 										':nextGameState' => $nextGameState, ':fromGSRecID' => $fromGSRecID,
 										':totalScore' => $totalScore, ':numVisits' => $numVisits, ':winMove' => $winMove));
 		$updateCount = $qryUpdateGSAction->rowcount();
@@ -376,7 +379,7 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 		fnLogMessageToDb($errMsg);
 		return "qryUpdateGSAction error2 " . $e->getMessage() ;
 	}
-	
+
 	if ($errMsg = ''){
 		fnLogMessageToDb('fnQryUpdateGSAction finished');
 		return '';
@@ -395,11 +398,11 @@ function fnQrySelectGSActionRec($gsRecID) {
 		//execute query
 		$qrySelectGSActionRec->execute(array(':gsRecID' => $gsRecID));
 		// set the resulting array to associative
-		$result = $qrySelectGSActionRec->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGSActionRec->fetchAll() as $aGSActionRow) { 
+		$result = $qrySelectGSActionRec->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGSActionRec->fetchAll() as $aGSActionRow) {
 			$gsActionRows[] = $aGSActionRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $gsActionRows; }
 		else {
@@ -425,8 +428,8 @@ function fnQrySelectGSActionChildMoves($gameState, $fromGSRecID) {
 		//execute normal query
 		$qrySelectGSActionMoves -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID));
 		// set the resulting array to associative
-		$result = $qrySelectGSActionMoves -> setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGSActionMoves -> fetchAll() as $aGSActionRow) { 
+		$result = $qrySelectGSActionMoves -> setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGSActionMoves -> fetchAll() as $aGSActionRow) {
 			if ($aGSActionRow['NumVisits'] > 0) {
 				$aGSActionRow['AvScore'] = $aGSActionRow['TotalScore'] / $aGSActionRow['NumVisits'];
 			}
@@ -434,7 +437,7 @@ function fnQrySelectGSActionChildMoves($gameState, $fromGSRecID) {
 				$aGSActionRow['AvScore'] = 0;
 			}
 			$gsActionRows[] = $aGSActionRow;
-			$rowCount++; 
+			$rowCount++;
 		}
 
 		if ($rowCount>0) {
@@ -442,7 +445,7 @@ function fnQrySelectGSActionChildMoves($gameState, $fromGSRecID) {
 		else {
 			$errMsg = 'fnQrySelectGSActionChildMoves - GSA move recs for ' . $gameState . ' not found';
 			fnLogMessageToDb($errMsg);
-			return $errMsg; 
+			return $errMsg;
 		}
 	}
 	catch(PDOException $e) {
@@ -463,16 +466,21 @@ function fnQrySelectGSActionParent($gameState) {
 		$emptyString = '';
 		$qrySelectGSActionRoot->execute(array(':gameState' => $gameState));
 		// set the resulting array to associative
-		$result = $qrySelectGSActionRoot -> setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGSActionRoot -> fetchAll() as $aGSActionRow) { 
+		$result = $qrySelectGSActionRoot -> setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGSActionRoot -> fetchAll() as $aGSActionRow) {
 			$gsActionRows[] = $aGSActionRow;
 			$rowCount++; }
-		
+
 		if ($rowCount > 1){
 			$errMsg = 'fnQrySelectGSActionParent error - there should be one parent but ' . $rowCount . ' found';
 			fnLogMessageToDb($errMsg);
 			return $errMsg;
 		}
+      	elseif ($rowCount == 0){
+          	$errMsg = 'fnQrySelectGSActionParent error - parent not found for game state >' . $gameState . '<';
+          	fnLogMessageToDb($errMsg);
+          	return array();
+        }
 		else return $gsActionRows;
 	}
 	catch(PDOException $e) {
@@ -491,8 +499,8 @@ function fnQryAddGCPlayerData2($gcNewPlayerMoves) {
 	for ($i=0; $i<$count; $i++) {
 		try {
 			//execute query  (:playerRef, :board, :movePos, :moveDir, :usedTimes, :qValue)
-			$qryAddGCPlayerData2->execute(array(':playerRef' => $gcNewPlayerMoves[$i]['GCPlayerRef'], ':board' => $gcNewPlayerMoves[$i]['Board'], 
-											':movePos' => $gcNewPlayerMoves[$i]['MovePos'], ':moveDir' => $gcNewPlayerMoves[$i]['MoveDir'], 
+			$qryAddGCPlayerData2->execute(array(':playerRef' => $gcNewPlayerMoves[$i]['GCPlayerRef'], ':board' => $gcNewPlayerMoves[$i]['Board'],
+											':movePos' => $gcNewPlayerMoves[$i]['MovePos'], ':moveDir' => $gcNewPlayerMoves[$i]['MoveDir'],
 											':qValue' => $gcNewPlayerMoves[$i]['QValue']));
 		}
 		catch(PDOException $e) {
@@ -513,16 +521,16 @@ function fnQryUpdateGCPlayerData2($gcUpdatedPlayerMoves) {
 	fnLogMessageToDb('start fnQryUpdateGCPlayerData');
 	global $qryUpdateGCPlayerData2;
 	$errMsg = '';
-	
+
 	$count1 = count($gcUpdatedPlayerMoves);
 	echo 'count1=' . $count1 . '<br>';
 	for ($i = 0; $i < $count1; $i++) {
 		try {
 			//execute query
-			$qryUpdateGCPlayerData2->execute(array(':qValue' => $gcUpdatedPlayerMoves[$i]['QValue'], ':playerRef' => $gcUpdatedPlayerMoves[$i]['GCPlayerRef'], 
+			$qryUpdateGCPlayerData2->execute(array(':qValue' => $gcUpdatedPlayerMoves[$i]['QValue'], ':playerRef' => $gcUpdatedPlayerMoves[$i]['GCPlayerRef'],
 											':moveDir' => $gcUpdatedPlayerMoves[$i]['MoveDir'],':movePos' => $gcUpdatedPlayerMoves[$i]['MovePos'],
 											':usedTimes' => $gcUpdatedPlayerMoves[$i]['UsedTimes'], ':board' => $gcUpdatedPlayerMoves[$i]['Board']));
-			echo 'update rec, used=' . $gcUpdatedPlayerMoves[$i]['UsedTimes'] . '< board=' . $gcUpdatedPlayerMoves[$i]['Board'] . 
+			echo 'update rec, used=' . $gcUpdatedPlayerMoves[$i]['UsedTimes'] . '< board=' . $gcUpdatedPlayerMoves[$i]['Board'] .
 					'< player=' . $gcUpdatedPlayerMoves[$i]['GCPlayerRef'] . '< moveDir=' . $gcUpdatedPlayerMoves[$i]['MoveDir'] . '< movePos=' . $gcUpdatedPlayerMoves[$i]['MovePos'] .
 					'< score=' . $gcUpdatedPlayerMoves[$i]['QValue'] . '< updateCount=' . $qryUpdateGCPlayerData2->rowCount() . '<br>';
 		}
@@ -550,7 +558,7 @@ function fnQryAddGCPlayerData($gcNewPlayerMoves) {
 	for ($i=0; $i<$count; $i++) {
 		try {
 			//execute query  (:playerRef, :board, :movePos, :moveDir, :updateTimes, :source')
-			$qryAddGCPlayerData->execute(array(':playerRef' => $gcNewPlayerMoves[$i]['GCPlayerRef'], ':board' => $gcNewPlayerMoves[$i]['Board'], 
+			$qryAddGCPlayerData->execute(array(':playerRef' => $gcNewPlayerMoves[$i]['GCPlayerRef'], ':board' => $gcNewPlayerMoves[$i]['Board'],
 										':movePos' => $gcNewPlayerMoves[$i]['MovePos'], ':moveDir' => $gcNewPlayerMoves[$i]['MoveDir'], ':source' => $gcNewPlayerMoves[$i]['Source']));
 		}
 		catch(PDOException $e) {
@@ -572,12 +580,12 @@ function fnQryUpdateGCPlayerData($gcUpdatedPlayerMoves) {
 	fnLogMessageToDb('start fnQryUpdateGCPlayerData');
 	global $qryUpdateGCPlayerData;
 	$errMsg = '';
-	
+
 	$count1 = count($gcUpdatedPlayerMoves);
 	for ($i = 0; $i < $count1; $i++) {
 		try {
 			//execute query
-			$qryUpdateGCPlayerData->execute(array(':source' => $gcUpdatedPlayerMoves[$i]['Source'], ':playerRef' => $gcUpdatedPlayerMoves[$i]['GCPlayerRef'], 
+			$qryUpdateGCPlayerData->execute(array(':source' => $gcUpdatedPlayerMoves[$i]['Source'], ':playerRef' => $gcUpdatedPlayerMoves[$i]['GCPlayerRef'],
 											':usedTimes' => $gcUpdatedPlayerMoves[$i]['UsedTimes'], ':board' => $gcUpdatedPlayerMoves[$i]['Board']));
 		}
 		catch(PDOException $e) {
@@ -605,11 +613,11 @@ function fnQrySelectGamesForPlayer ($playerRef, $turnCountVer=0) {
 		//execute query
 		$qrySelectGamesForPlayer->execute(array(':playerRef'=>$playerRef,':turnCountVer'=>$turnCountVer));
 		// set the resulting array to associative
-		$result = $qrySelectGamesForPlayer->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGamesForPlayer->fetchAll() as $aGameRow) { 
+		$result = $qrySelectGamesForPlayer->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGamesForPlayer->fetchAll() as $aGameRow) {
 			$gameRows[] = $aGameRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $gameRows; }
 		else {
@@ -622,7 +630,7 @@ function fnQrySelectGamesForPlayer ($playerRef, $turnCountVer=0) {
 		fnLogMessageToDb($errMsg);
 		//Rollbar::report_exception($e, array('error message' => $errMsg));
 		return "SelectGamesForPlayer error";
-		}	
+		}
 }
 //End fnQrySelectGamesForPlayer
 function fnQrySelectGame ($gameRef, $turnCountVer=0) {
@@ -635,10 +643,10 @@ function fnQrySelectGame ($gameRef, $turnCountVer=0) {
 		//execute query
 		$qrySelectGame->execute(array(':gameRef'=>$gameRef,':turnCountVer'=>$turnCountVer));
 		// set the resulting array to associative
-		$result = $qrySelectGame->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGame->fetchAll() as $gameRow) { 
+		$result = $qrySelectGame->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGame->fetchAll() as $gameRow) {
 			$rowCount++; }
-		
+
 		if ($rowCount==1) {
 			return $gameRow; }
 		elseif ($rowCount>1) {
@@ -654,7 +662,7 @@ function fnQrySelectGame ($gameRef, $turnCountVer=0) {
 		fnLogMessageToDb($errMsg);
 		//Rollbar::report_exception($e, array('error message' => $errMsg));
 		return "Select Game error";
-		}	
+		}
 	fnLogMessageToDb("exit fnQrySelectGame");
 }
 //End fnQrySelectGame
@@ -668,10 +676,10 @@ function fnQrySelectGameByID ($gameRecID) {
 		//execute query
 		$qrySelectGameByID->execute(array(':gameRecID'=>$gameRecID));
 		// set the resulting array to associative
-		$result = $qrySelectGameByID->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectGameByID->fetchAll() as $gameRow) { 
+		$result = $qrySelectGameByID->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectGameByID->fetchAll() as $gameRow) {
 			$rowCount++; }
-		
+
 		if ($rowCount==1) {
 			return $gameRow; }
 		elseif ($rowCount>1) {
@@ -688,8 +696,8 @@ function fnQrySelectGameByID ($gameRecID) {
 		fnLogMessageToDb($errMsg);
 		//Rollbar::report_exception($e, array('error message' => $errMsg));
 		return "SelectGameByID error";
-		}	
-	fnLogMessageToDb("exit fnQrySelectGameByID");	
+		}
+	fnLogMessageToDb("exit fnQrySelectGameByID");
 }
 //End fnQrySelectGameByID
 function fnQrySelectNmxGame ($hashKey) {
@@ -702,10 +710,10 @@ function fnQrySelectNmxGame ($hashKey) {
 		//execute query
 		$qrySelectNmxGame->execute(array(':hashKey'=>$hashKey));
 		// set the resulting array to associative
-		$result = $qrySelectNmxGame->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectNmxGame->fetchAll() as $gameRow) { 
+		$result = $qrySelectNmxGame->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectNmxGame->fetchAll() as $gameRow) {
 			$rowCount++; }
-		
+
 		if ($rowCount==1) {
 			return $gameRow; }
 		elseif ($rowCount>1) {
@@ -722,8 +730,8 @@ function fnQrySelectNmxGame ($hashKey) {
 		fnLogMessageToDb($errMsg);
 		//Rollbar::report_exception($e, array('error message' => $errMsg));
 		return "SelectNmxGame error";
-		}	
-	fnLogMessageToDb("exit fnQrySelectNmxGame");	
+		}
+	fnLogMessageToDb("exit fnQrySelectNmxGame");
 }
 //End fnQrySelectNmxGame
 function fnQryAddGame ($gameRef, $p1Ref, $p2Ref, $lastPlayerID, $startDate, $lastUpdated, $areaSize, $areaWidth, $winner, $turnCount, $turnCountVer) {
@@ -763,7 +771,7 @@ function fnQryAddNmxGame ($hashKey, $gameRef, $p1Ref, $p2Ref, $lastPlayer, $area
 }
 //End fnQryAddNmxGame
 function fnQryDeleteGames ($gameRef, $turnCount) {
-	fnLogMessageToDb("start fnQryDeleteGames");	
+	fnLogMessageToDb("start fnQryDeleteGames");
 	global $qryDeleteGames;
 	//execute prepared query
 	try {
@@ -851,7 +859,7 @@ function fnQryUpdateStack($stackNum, $stackHeight, $top, $counters, $stackRecID,
 	//execute prepared query
 	try {
 		//execute query
-		$qryUpdateStack->execute(array(':stackNum'=>$stackNum,':stackHeight'=>$stackHeight,':top'=>$top,':counters'=>$counters,':stackRecID'=>$stackRecID, 
+		$qryUpdateStack->execute(array(':stackNum'=>$stackNum,':stackHeight'=>$stackHeight,':top'=>$top,':counters'=>$counters,':stackRecID'=>$stackRecID,
 											':turnCount'=>$turnCount));
 		$updateCount = $qryUpdateStack->rowCount();
 		if ($updateCount==0){throw new Exception("zero stacks updated - ID=" . $stackRecID . " SN=" . $stackNum . " SH=" . $stackHeight . " TOP=" . $top . " TC=" . $turnCount);}
@@ -938,7 +946,7 @@ function fnQryAddNmxStack ($hashKey, $gameRef, $stackNum, $stackHeight, $top, $t
 }
 //End fnQryAddNmxStack
 function fnQryDeleteStacksForManyTurns ($gameRef, $turnCount) {
-	fnLogMessageToDb("start fnQryDeleteStacksForManyTurns");	
+	fnLogMessageToDb("start fnQryDeleteStacksForManyTurns");
 	global $qryDeleteStacksForManyTurns;
 	//execute prepared query
 	try {
@@ -965,7 +973,7 @@ function fnQryDeleteStacksForManyTurns ($gameRef, $turnCount) {
 }
 //End fnQryDeleteStacksForManyTurns
 function fnQryDeleteStacksForOneTurn ($gameRef, $turnCount) {
-	fnLogMessageToDb("start fnQryDeleteStacksForOneTurn");	
+	fnLogMessageToDb("start fnQryDeleteStacksForOneTurn");
 	global $qryDeleteStacksForOneTurn;
 	//execute prepared query
 	try {
@@ -1001,9 +1009,9 @@ function fnQrySelectStacks ($gameRef, $turnCount=0) {
 		//execute query
 		$qrySelectStacks->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
 		// set the resulting array to associative
-		$result = $qrySelectStacks->setFetchMode(PDO::FETCH_ASSOC); 
+		$result = $qrySelectStacks->setFetchMode(PDO::FETCH_ASSOC);
 		$stackRows = [];
-		foreach($qrySelectStacks->fetchAll() as $aStackRow) { 
+		foreach($qrySelectStacks->fetchAll() as $aStackRow) {
 			//add an extra column that will be used to flag if the row has been changed
 			array_push($aStackRow,"N");
 			//make the stackNum the key for each row
@@ -1035,13 +1043,13 @@ function fnQrySelectNmxStacks ($hashKey) {
 		//execute query
 		$qrySelectNmxStacks->execute(array(':hashKey'=>$hashKey));
 		// set the resulting array to associative
-		$result = $qrySelectNmxStacks->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectNmxStacks->fetchAll() as $aStackRow) { 
+		$result = $qrySelectNmxStacks->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectNmxStacks->fetchAll() as $aStackRow) {
 			//add an extra column that will be used to flag if the row has been changed
 			array_push($aStackRow,"N");
 			$stackRows[] = $aStackRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>=1) {
 			if ($logLevel>5) {fnLogMessageToDb("multiple nmx_stacks rows: ".$rowCount);}
 			return $stackRows;	}
@@ -1080,7 +1088,7 @@ function fnQryAddCounter ($gameRef, $stackNum, $playerRef, $counterHeight, $turn
 //End fnQryAddCounter
 function fnQryAddNmxCounter ($hashKey, $gameRef, $stackNum, $playerRef, $counterHeight, $turnCount) {
 	global $qryAddNmxCounter, $logLevel;
-	if ($logLevel>3){fnLogMessageToDb("start fnQryAddNmxCounter");}	
+	if ($logLevel>3){fnLogMessageToDb("start fnQryAddNmxCounter");}
 	//execute prepared query
 	try {
 		//execute query
@@ -1098,20 +1106,20 @@ function fnQryAddNmxCounter ($hashKey, $gameRef, $stackNum, $playerRef, $counter
 //End fnQryAddNmxCounter
 function fnQrySelectCounters ($gameRef, $stackNum, $turnCount) {
 	global $qrySelectCounters, $logLevel;
-	if ($logLevel>3) {fnLogMessageToDb("start fnQrySelectCounters");}	
+	if ($logLevel>3) {fnLogMessageToDb("start fnQrySelectCounters");}
 	//execute prepared query
 	$rowCount=0;
 	try {
 		//execute query
 		$qrySelectCounters->execute(array(':gameRef'=>$gameRef, ':stackNum'=>$stackNum, ':turnCount'=>$turnCount));
 		// set the resulting array to associative
-		$result = $qrySelectCounters->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectCounters->fetchAll() as $aCountersRow) { 
+		$result = $qrySelectCounters->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectCounters->fetchAll() as $aCountersRow) {
 			//add an extra column that will be used to flag if the row has been changed
 			array_push($aCountersRow,"N");
 			$countersRows[] = $aCountersRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $countersRows; }
 		else {
@@ -1137,13 +1145,13 @@ function fnQrySelectNmxCounters ($hashKey, $stackNum) {
 		//execute query
 		$qrySelectNmxCounters->execute(array(':hashKey'=>$hashKey, ':stackNum'=>$stackNum));
 		// set the resulting array to associative
-		$result = $qrySelectNmxCounters->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectNmxCounters->fetchAll() as $aCountersRow) { 
+		$result = $qrySelectNmxCounters->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectNmxCounters->fetchAll() as $aCountersRow) {
 			//add an extra column that will be used to flag if the row has been changed
 			array_push($aCountersRow,"N");
 			$countersRows[] = $aCountersRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $countersRows; }
 		else {
@@ -1170,11 +1178,11 @@ function fnQrySelectAllCounters ($gameRef, $turnCount) {
 		//execute query
 		$qrySelectAllCounters->execute(array(':gameRef'=>$gameRef, ':turnCount'=>$turnCount));
 		// set the resulting array to associative
-		$result = $qrySelectAllCounters->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectAllCounters->fetchAll() as $aCountersRow) { 
+		$result = $qrySelectAllCounters->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectAllCounters->fetchAll() as $aCountersRow) {
 			$countersRows[] = $aCountersRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $countersRows; }
 		else {
@@ -1200,11 +1208,11 @@ function fnQrySelectAllNmxCounters ($hashKey) {
 		//execute query
 		$qrySelectAllNmxCounters->execute(array(':hashKey'=>$hashKey));
 		// set the resulting array to associative
-		$result = $qrySelectAllNmxCounters->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectAllNmxCounters->fetchAll() as $aCountersRow) { 
+		$result = $qrySelectAllNmxCounters->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectAllNmxCounters->fetchAll() as $aCountersRow) {
 			$countersRows[] = $aCountersRow;
 			$rowCount++; }
-		
+
 		if ($rowCount>0) {
 			return $countersRows; }
 		else {
@@ -1276,7 +1284,7 @@ function fnQryUpdateNmxCounters ($stackNum, $playerRef, $counterHeight, $counter
 }
 //End fnQryUpdateNmxCounters
 function fnQryDeleteCountersForOneTurn ($gameRef, $turnCount) {
-	fnLogMessageToDb("start fnQryDeleteCountersForOneTurn");	
+	fnLogMessageToDb("start fnQryDeleteCountersForOneTurn");
 	global $qryDeleteCountersForOneTurn;
 	//execute prepared query
 	try {
@@ -1303,7 +1311,7 @@ function fnQryDeleteCountersForOneTurn ($gameRef, $turnCount) {
 }
 //End fnQryDeleteCountersForOneTurn
 function fnQryDeleteCountersForManyTurns ($gameRef, $turnCount) {
-	fnLogMessageToDb("start fnQryDeleteCountersForManyTurns");	
+	fnLogMessageToDb("start fnQryDeleteCountersForManyTurns");
 	global $qryDeleteCountersForManyTurns;
 	//execute prepared query
 	try {
@@ -1338,10 +1346,10 @@ function fnQrySelectPlayer ($playerName) {
 		//execute query
 		$qrySelectPlayer->execute(array(':playerName'=>$playerName));
 		// set the resulting array to associative
-		$result = $qrySelectPlayer->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectPlayer->fetchAll() as $playerRow) { 
+		$result = $qrySelectPlayer->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectPlayer->fetchAll() as $playerRow) {
 			$rowCount++; }
-		
+
 		if ($rowCount==1) {
 			return $playerRow; }
 		elseif ($rowCount>1) {
@@ -1361,7 +1369,7 @@ function fnQrySelectPlayer ($playerName) {
 }
 //End fnQrySelectPlayer
 function fnQryAddPlayer($playerRef,$playerName,$password,$hint) {
-	fnLogMessageToDb("start fnQryAddPlayer");	
+	fnLogMessageToDb("start fnQryAddPlayer");
 	global $qryAddPlayer;
 	//execute prepared query
 	try {
@@ -1382,16 +1390,16 @@ function fnQryAddPlayer($playerRef,$playerName,$password,$hint) {
 function fnQrySelectRefs() {
 	global $qrySelectRefs, $logLevel, $pScoreFactor, $rScoreFactor, $sScoreFactor;
 	if ($logLevel>3) {fnLogMessageToDb("start fnQrySelectRefs"); }
-	$rowCount = 0; 
+	$rowCount = 0;
 	//execute prepared query
 	try {
 		//execute query
 		$qrySelectRefs->execute();
 		// set the resulting array to associative
-		$result = $qrySelectRefs->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectRefs->fetchAll() as $refsRow) { 
+		$result = $qrySelectRefs->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectRefs->fetchAll() as $refsRow) {
 			$rowCount++; }
-		
+
 		if ($rowCount==1) {
 			$logLevel = $refsRow['LogLevel'];
 			$pScoreFactor = $refsRow['pScoreFactor'];
@@ -1412,7 +1420,7 @@ function fnQrySelectRefs() {
 }
 //End fnQrySelectRefs
 function fnQryUpdateRefs($playerRef,$gameRef) {
-	fnLogMessageToDb("start fnQryUpdateRefs");	
+	fnLogMessageToDb("start fnQryUpdateRefs");
 	global $qryUpdateRefs;
 	//execute prepared query
 	try {
@@ -1436,29 +1444,29 @@ function fnReferencesTable ($method) {
 	$playerRef = $refsRow['NextPlayerRef'];
 	$gameRef = $refsRow['NextGameRef'];
 
-	//update refs as required 
+	//update refs as required
 	switch ($method) {
 		case "new game ref":
 			$nextPlayerRef = $playerRef;
 			$nextGameRef= $gameRef + 1;
 			break;
-		
+
 		case "new both":
 			$nextPlayerRef = $playerRef+1;
 			$nextGameRef= $gameRef + 1;
 			break;
-		
+
 		case "new player ref":
 			$nextPlayerRef = $playerRef+1;
 			$nextGameRef= $gameRef;
 			break;
-	
+
 		default:
 			$nextPlayerRef = 0;
 			$nextGameRef= 0;
 			break;
 	}
-	
+
 	//update db
 	if ($nextGameRef==0) {
 		fnLogMessageToDb("invalid method: ".$method);
@@ -1471,14 +1479,14 @@ function fnReferencesTable ($method) {
 function fnQrySelectOpenGames() {
 	fnLogMessageToDb("start fnQrySelectOpenGames");
 	global $qrySelectOpenGames;
-	$rowCount = 0; 
+	$rowCount = 0;
 	//execute prepared query
 	try {
 		//execute query
 		$qrySelectOpenGames->execute();
 		// set the resulting array to associative
-		$result = $qrySelectOpenGames->setFetchMode(PDO::FETCH_ASSOC); 
-		foreach($qrySelectOpenGames->fetchAll() as $aGamesRow) { 
+		$result = $qrySelectOpenGames->setFetchMode(PDO::FETCH_ASSOC);
+		foreach($qrySelectOpenGames->fetchAll() as $aGamesRow) {
 			$openGamesRows[] = $aGamesRow;
 			$rowCount++; }
 
@@ -1492,7 +1500,7 @@ function fnQrySelectOpenGames() {
 		$errMsg = "qrySelectOpenGames failed: " . $e->getMessage();
 		fnLogMessageToDb($errMsg);
 		//Rollbar::report_exception($e, array('error message' => $errMsg));
-		}	
+		}
 }
 //End fnQrySelectOpenGames
 function fnDbDisconnect() {

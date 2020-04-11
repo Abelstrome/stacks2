@@ -18,8 +18,8 @@ function fnDbConnect() {
 	if (strpos(strtoupper($_SERVER['SCRIPT_NAME']),'BATCH') !== False){
 		require 'C:/xampp/htdocs/stacks/Alison2/blah.ini'; 
 	}
-	else if (strtoupper(substr($_SERVER['DOCUMENT_ROOT'],17,8)) == 'ICODE-GO') {
-		require $_SERVER['DOCUMENT_ROOT'].'/stacks2/Alison2.blah.ini'; }
+	else if (strpos(strtoupper($_SERVER['DOCUMENT_ROOT']), 'ICODE-GO') !== False) {
+		require $_SERVER['DOCUMENT_ROOT'].'/stacks/Alison2.blah.ini'; }
 	else if ($_SERVER['SERVER_NAME'] == 'localhost') {
 		require 'C:/xampp/htdocs/stacks/Alison2/blah.ini'; }
 	else {
@@ -209,12 +209,13 @@ function fnDbConnect() {
 		$qryUpdateGCPlayerData = $conn->prepare($query);
 		
 		//Add GSA
-		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, MoveDir = :moveDir, MovePos = :movePos';
+		$query = 'INSERT INTO v2_gamestateaction SET GameState = :gameState, FromGSRecID = :fromGSRecID, NextGameState = :nextGameState, ';
+		$query = $query . 'MoveDir = :moveDir, MovePos = :movePos, WinMove = :winMove';
 		$qryAddGSAction = $conn->prepare($query);
 		
 		//Update GSA
-		$query = 'UPDATE v2_gamestateaction SET GameState = :gameState, MoveDir = :moveDir, MovePos = :movePos, NextGameState =:nextGameState, FromGSRecID = :fromGSRecID, ';
-		$query = $query . 'TotalScore = :totalScore, NumVisits = :numVisits WHERE GSRecID = :gsRecID';
+		$query = 'UPDATE v2_gamestateaction SET GameState = :gameState, MoveDir = :moveDir, MovePos = :movePos, NextGameState =:nextGameState, ';
+		$query = $query . 'FromGSRecID = :fromGSRecID, TotalScore = :totalScore, NumVisits = :numVisits, WinMove = :winMove WHERE GSRecID = :gsRecID';
 		$qryUpdateGSAction = $conn->prepare($query);
 		
 		//Select GSA move records
@@ -330,14 +331,14 @@ function fnQrySelectGCPlayerData2($playerRef) {
 	}
 }
 //End fnQrySelectGCPlayerData2
-function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0) {
+function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0, $movePos = 0, $winMove = '') {
 	fnLogMessageToDb('start fnQryAddGSAction');
 	global $qryAddGSAction;
 	$errMsg = '';
 
 	try {
 		$qryAddGSAction -> execute(array(':gameState' => $gameState, ':fromGSRecID' => $fromGSRecID, ':nextGameState' => $nextGameState, 
-								':moveDir' => $moveDir,':movePos' => $movePos));
+								':moveDir' => $moveDir,':movePos' => $movePos, ':winMove' => $winMove));
 	}
 	catch(PDOException $e) {
 		$errMsg = "qryAddGSAction failed (for GameState " . $gameState . ' and fromGSRecID ' . $fromGSRecID . '): ' . $e->getMessage();
@@ -352,7 +353,7 @@ function fnQryAddGSAction($gameState, $fromGSRecID, $nextGameState, $moveDir = 0
 		return $errMsg; }
 }
 //End fnQryAddGSAction
-function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRecID, $nextGameState, $totalScore, $numVisits) {
+function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRecID, $nextGameState, $totalScore, $numVisits, $winMove) {
 	fnLogMessageToDb('start fnQryUpdateGSAction');
 	global $qryUpdateGSAction;
 	$errMsg = '';
@@ -361,7 +362,7 @@ function fnQryUpdateGSAction($gsRecID, $gameState, $moveDir, $movePos, $fromGSRe
 		//execute query
 		$qryUpdateGSAction->execute(array(':gsRecID' => $gsRecID, ':gameState' => $gameState, ':moveDir' => $moveDir,':movePos' => $movePos, 
 										':nextGameState' => $nextGameState, ':fromGSRecID' => $fromGSRecID,
-										':totalScore' => $totalScore, ':numVisits' => $numVisits));
+										':totalScore' => $totalScore, ':numVisits' => $numVisits, ':winMove' => $winMove));
 		$updateCount = $qryUpdateGSAction->rowcount();
 		if ($updateCount==0){
 			throw new Exception('zero GSActions updated for GSRecID=' . $gsRecID);}
